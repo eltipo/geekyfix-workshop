@@ -19,6 +19,7 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<"home" | "clients" | "devices" | "report" | "tools" | "budgets" | "settings" | "calendar" | "tasks" | "projects">("home");
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>();
+  const [selectedBudgetId, setSelectedBudgetId] = useState<string | undefined>();
   const [deviceFilter, setDeviceFilter] = useState<DeviceFilterStatus>(() => {
     return (localStorage.getItem('deviceFilter') as DeviceFilterStatus) || 'all';
   });
@@ -278,7 +279,7 @@ export default function App() {
           )}
           {currentTab === "report" && <DailyReport />}
           {currentTab === "tools" && <ToolsList />}
-          {currentTab === "budgets" && <BudgetsList appMode={appMode} initialDeviceId={selectedDeviceId} />}
+          {currentTab === "budgets" && <BudgetsList appMode={appMode} initialDeviceId={selectedDeviceId} initialBudgetId={selectedBudgetId} />}
           {currentTab === "settings" && <Settings />}
           {currentTab === "calendar" && (
             <CalendarView 
@@ -307,7 +308,15 @@ export default function App() {
               <ServiceTasksList clientId={selectedClientId} />
             </div>
           )}
-          {currentTab === "projects" && <ProjectsList clientId={selectedClientId} />}
+          {currentTab === "projects" && (
+            <ProjectsList 
+              clientId={selectedClientId} 
+              onNavigateToBudget={(budgetId) => {
+                setSelectedBudgetId(budgetId);
+                setCurrentTab("budgets");
+              }}
+            />
+          )}
         </div>
 
         {/* Toggle Footer Button */}

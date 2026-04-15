@@ -9,10 +9,12 @@ import { getBase64ImageFromUrl } from "../lib/utils";
 
 export function BudgetsList({ 
   appMode,
-  initialDeviceId 
+  initialDeviceId,
+  initialBudgetId
 }: { 
   appMode: "workshop" | "project",
-  initialDeviceId?: string 
+  initialDeviceId?: string,
+  initialBudgetId?: string
 }) {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -21,10 +23,16 @@ export function BudgetsList({
   const [showForm, setShowForm] = useState(!!initialDeviceId);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [budgetToDelete, setBudgetToDelete] = useState<string | null>(null);
-  const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
+  const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(initialBudgetId || null);
   const [budgetToApprove, setBudgetToApprove] = useState<Budget | null>(null);
   const [isApproving, setIsApproving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+
+  useEffect(() => {
+    if (initialBudgetId) {
+      setSelectedBudgetId(initialBudgetId);
+    }
+  }, [initialBudgetId]);
 
   useEffect(() => {
     Promise.all([api.getBudgets(), api.getDevices(), api.getClients(), api.getProjects()]).then(([buds, devs, clis, projs]) => {

@@ -248,7 +248,10 @@ export function ClientsList({
   };
 
   const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+    const f = firstName?.charAt(0) || "";
+    const l = lastName?.charAt(0) || "";
+    if (!f && !l) return "?";
+    return `${f}${l}`.toUpperCase();
   };
 
   const getGravatarUrl = (email: string) => {
@@ -397,7 +400,7 @@ export function ClientsList({
               >
                 <div className="flex items-center gap-2 mb-0.5">
                   <h3 className="font-bold text-gray-900 dark:text-gray-100 truncate">
-                    {client.firstName} {client.lastName}
+                    {`${client.firstName} ${client.lastName}`.trim() || "Cliente sin nombre"}
                   </h3>
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1">
@@ -934,7 +937,6 @@ function ClientForm({
           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Nombre</label>
           <input
             type="text"
-            required
             className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
             value={formData.firstName}
             onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
@@ -945,7 +947,6 @@ function ClientForm({
           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Apellido</label>
           <input
             type="text"
-            required
             className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
             value={formData.lastName}
             onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
