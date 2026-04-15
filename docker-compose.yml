@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  geekyfix:
+    build: .
+    container_name: geekyfix-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Montamos la carpeta data para persistencia de la base de datos y las imágenes
+      - /mnt/lvm102-1/databases/geekyfix-workshop/data:/data
+    environment:
+      - NODE_ENV=production
+      - DATA_PATH=/data

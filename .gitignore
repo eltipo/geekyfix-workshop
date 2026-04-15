@@ -1,0 +1,16 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Datos de producción
+data/
+db.json
+uploads/
+
+# Ignorar la carpeta public para gestión manual en GitHub
+

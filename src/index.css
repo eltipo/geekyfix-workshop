@@ -1,0 +1,26 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html {
+    @apply text-sm;
+  }
+  
+  @media (max-width: 320px) {
+    html {
+      font-size: 12px;
+    }
+  }
+}
+
+@layer utilities {
+  @media (max-width: 640px) {
+    .no-scrollbar-mobile::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar-mobile {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  }
+}
