@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { Budget, Device, Client, BudgetItem, Ticket, ServiceType, Project, BudgetScopeSection, BudgetDirectCost, BudgetProfessionalFee, BudgetTimelineItem } from "../types";
-import { ReceiptText, Plus, Trash2, Edit2, FileDown, MessageCircle, ArrowLeft, ChevronRight, Calculator, X, CheckCircle, Clock, AlertTriangle, Briefcase, Folder, Info, List, DollarSign, Calendar as CalendarIcon, ChevronDown, ChevronUp } from "lucide-react";
+import { ReceiptText, Plus, Trash2, Edit2, FileDown, MessageCircle, ArrowLeft, ChevronRight, Calculator, X, CheckCircle, Clock, AlertTriangle, Briefcase, Folder, Info, List, DollarSign, Calendar as CalendarIcon, ChevronDown, ChevronUp, Copy } from "lucide-react";
 import { Modal } from "./Modal";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -59,6 +59,24 @@ export function BudgetsList({
       await api.deleteBudget(budgetToDelete);
       setBudgets(budgets.filter(b => b.id !== budgetToDelete));
       setBudgetToDelete(null);
+    }
+  };
+
+  const handleDuplicateBudget = async (budget: Budget) => {
+    const { id, ...budgetData } = budget;
+    const duplicatedData: Partial<Budget> = {
+      ...budgetData,
+      status: 'pending',
+      date: new Date().toISOString().split('T')[0]
+    };
+
+    try {
+      const saved = await api.createBudget(duplicatedData);
+      setBudgets([...budgets, saved]);
+      setEditingBudget(saved);
+      setSelectedBudgetId(saved.id);
+    } catch (error) {
+      console.error("Error duplicating budget", error);
     }
   };
 
@@ -498,6 +516,13 @@ export function BudgetsList({
               </div>
             </div>
             <div className="flex gap-2">
+              <button 
+                onClick={() => handleDuplicateBudget(selectedBudget)} 
+                title="Duplicar Presupuesto"
+                className="bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 p-2 rounded-lg shadow-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+              >
+                <Copy size={16} />
+              </button>
               <button onClick={() => setEditingBudget(selectedBudget)} className="bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800 p-2 rounded-lg shadow-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
                 <Edit2 size={16} />
               </button>
