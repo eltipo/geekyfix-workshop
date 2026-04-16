@@ -9,11 +9,13 @@ export function Dashboard({
   appMode,
   onNavigate, 
   onSelectDevice,
+  onSelectProject,
   onSetDeviceFilter
 }: { 
   appMode: "workshop" | "project",
   onNavigate: (tab: "clients" | "devices" | "report" | "tools" | "budgets" | "projects") => void,
   onSelectDevice: (deviceId: string) => void,
+  onSelectProject: (projectId: string) => void,
   onSetDeviceFilter: (filter: DeviceFilterStatus) => void
 }) {
   const [stats, setStats] = useState({
@@ -255,7 +257,7 @@ export function Dashboard({
                     <div 
                       key={project.id} 
                       className="flex items-center justify-between text-sm p-3 bg-gray-50 dark:bg-gray-900 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer transition-colors group"
-                      onClick={() => onNavigate("projects")}
+                      onClick={() => onSelectProject(project.id)}
                     >
                       <div className="flex flex-col">
                         <span className="font-bold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">

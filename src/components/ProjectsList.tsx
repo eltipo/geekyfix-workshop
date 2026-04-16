@@ -1,11 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { Project, Client, ProjectDoc, Budget } from "../types";
-import { Plus, Folder, FileText, Image as ImageIcon, Link as LinkIcon, Trash2, Edit2, ExternalLink, Calendar, User, Upload, X, CheckCircle2, Clock, AlertCircle, Copy, Camera, Maximize2, ReceiptText, ChevronRight } from "lucide-react";
+import { Plus, Folder, FileText, Image as ImageIcon, Link as LinkIcon, Trash2, Edit2, ExternalLink, Calendar, User, Upload, X, CheckCircle2, Clock, AlertCircle, Camera, Maximize2, ReceiptText, ChevronRight } from "lucide-react";
 import { Modal } from "./Modal";
 import { ServiceTasksList } from "./ServiceTasksList";
 
-export function ProjectsList({ clientId, onNavigateToBudget }: { clientId?: string, onNavigateToBudget?: (budgetId: string) => void }) {
+export function ProjectsList({ 
+  clientId, 
+  onNavigateToBudget,
+  initialProjectId,
+  onClose
+}: { 
+  clientId?: string, 
+  onNavigateToBudget?: (budgetId: string) => void,
+  initialProjectId?: string,
+  onClose?: () => void
+}) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -17,6 +27,15 @@ export function ProjectsList({ clientId, onNavigateToBudget }: { clientId?: stri
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (initialProjectId && projects.length > 0) {
+      const project = projects.find(p => p.id === initialProjectId);
+      if (project) {
+        setSelectedProject(project);
+      }
+    }
+  }, [initialProjectId, projects]);
 
   const loadData = async () => {
     const [p, c, b] = await Promise.all([api.getProjects(), api.getClients(), api.getBudgets()]);
@@ -73,24 +92,6 @@ export function ProjectsList({ clientId, onNavigateToBudget }: { clientId?: stri
       console.error("Error uploading documents", error);
     } finally {
       setIsUploading(false);
-    }
-  };
-
-  const handleCloneClient = async (client: Client) => {
-    const isCurrentlyWorkshop = client.type === 'workshop' || !client.type;
-    const newType: 'workshop' | 'project' = isCurrentlyWorkshop ? 'project' : 'workshop';
-    const { id, ...clientData } = client;
-    const clonedClient: Partial<Client> = {
-      ...clientData,
-      type: newType,
-    };
-    
-    try {
-      await api.createClient(clonedClient);
-      // No need to update local state as it's likely cloned to a different type
-      // that wouldn't be shown in the current view anyway.
-    } catch (error) {
-      console.error("Error cloning client:", error);
     }
   };
 
@@ -201,10 +202,12 @@ export function ProjectsList({ clientId, onNavigateToBudget }: { clientId?: stri
           project={selectedProject}
           client={clients.find(c => c.id === selectedProject.clientId)}
           budgets={budgets.filter(b => b.projectId === selectedProject.id)}
-          onClose={() => setSelectedProject(null)}
+          onClose={() => {
+            setSelectedProject(null);
+            if (onClose) onClose();
+          }}
           onUploadDocs={(files, links) => handleUploadDocs(selectedProject.id, files, links)}
           onUpdateProject={(data) => handleUpdateProject(selectedProject.id, data)}
-          onCloneClient={handleCloneClient}
           onNavigateToBudget={onNavigateToBudget}
           isUploading={isUploading}
         />
@@ -313,14 +316,13 @@ function ProjectForm({ clients, initialData, onSave, onCancel }: { clients: Clie
   );
 }
 
-function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpdateProject, onCloneClient, onNavigateToBudget, isUploading }: { project: Project, client?: Client, budgets: Budget[], onClose: () => void, onUploadDocs: (files: FileList | null, links: { name: string, url: string }[]) => void, onUpdateProject: (data: Partial<Project>) => void, onCloneClient: (client: Client) => void, onNavigateToBudget?: (budgetId: string) => void, isUploading: boolean }) {
+function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpdateProject, onNavigateToBudget, isUploading }: { project: Project, client?: Client, budgets: Budget[], onClose: () => void, onUploadDocs: (files: FileList | null, links: { name: string, url: string }[]) => void, onUpdateProject: (data: Partial<Project>) => void, onNavigateToBudget?: (budgetId: string) => void, isUploading: boolean }) {
   const [showUpload, setShowUpload] = useState(false);
   const [newLinks, setNewLinks] = useState<{ name: string, url: string }[]>([]);
   const [linkName, setLinkName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [notes, setNotes] = useState(project.notes || "");
-  const [clonedStatus, setClonedStatus] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
@@ -334,14 +336,6 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
     if (e.target.files && e.target.files.length > 0) {
       onUploadDocs(e.target.files, []);
       setShowUpload(false);
-    }
-  };
-
-  const handleClone = async () => {
-    if (client) {
-      onCloneClient(client);
-      setClonedStatus(`Cliente clonado a ${client.type === 'workshop' ? 'Proyectos' : 'Workshop'}`);
-      setTimeout(() => setClonedStatus(null), 3000);
     }
   };
 
@@ -377,24 +371,9 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Cliente</p>
                 <div className="flex items-center gap-2">
                   <p className="font-bold text-gray-900 dark:text-gray-100">{client ? `${client.firstName} ${client.lastName}` : "N/A"}</p>
-                  {client && (
-                    <button
-                      onClick={handleClone}
-                      className="p-1 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
-                      title={`Clonar cliente a ${client.type === 'workshop' ? 'Proyectos' : 'Workshop'}`}
-                    >
-                      <Copy size={14} />
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
-            {clonedStatus && (
-              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 px-3 py-1 rounded-lg border border-green-100 dark:border-green-800 animate-in fade-in slide-in-from-left-2">
-                <CheckCircle2 size={14} className="text-green-600 dark:text-green-400" />
-                <span className="text-xs font-bold text-green-600 dark:text-green-400">{clonedStatus}</span>
-              </div>
-            )}
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
                 <Calendar size={20} />

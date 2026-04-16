@@ -19,6 +19,7 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<"home" | "clients" | "devices" | "report" | "tools" | "budgets" | "settings" | "calendar" | "tasks" | "projects">("home");
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>();
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | undefined>();
   const [deviceFilter, setDeviceFilter] = useState<DeviceFilterStatus>(() => {
     return (localStorage.getItem('deviceFilter') as DeviceFilterStatus) || 'all';
@@ -202,7 +203,7 @@ export default function App() {
                   icon={<Folder size={24} />} 
                   label="Proyectos" 
                   active={currentTab === "projects"} 
-                  onClick={() => { setCurrentTab("projects"); setSelectedClientId(undefined); setIsDrawerOpen(false); }} 
+                  onClick={() => { setCurrentTab("projects"); setSelectedClientId(undefined); setSelectedProjectId(undefined); setIsDrawerOpen(false); }} 
                 />
               )}
 
@@ -235,8 +236,12 @@ export default function App() {
           {currentTab === "home" && (
             <Dashboard 
               appMode={appMode}
-              onNavigate={(tab) => setCurrentTab(tab as any)} 
+              onNavigate={(tab) => {
+                if (tab === "projects") setSelectedProjectId(undefined);
+                setCurrentTab(tab as any);
+              }} 
               onSelectDevice={(id) => { setSelectedDeviceId(id); setCurrentTab("devices"); }}
+              onSelectProject={(id) => { setSelectedProjectId(id); setCurrentTab("projects"); }}
               onSetDeviceFilter={setDeviceFilter}
             />
           )}
@@ -313,6 +318,8 @@ export default function App() {
           {currentTab === "projects" && (
             <ProjectsList 
               clientId={selectedClientId} 
+              initialProjectId={selectedProjectId}
+              onClose={() => setSelectedProjectId(undefined)}
               onNavigateToBudget={(budgetId) => {
                 setSelectedBudgetId(budgetId);
                 setCurrentTab("budgets");
