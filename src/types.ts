@@ -54,6 +54,33 @@ export interface BudgetItem {
   amount: number;
 }
 
+export interface BudgetScopeSection {
+  title: string;
+  items: { title: string; description: string }[];
+}
+
+export interface BudgetDirectCost {
+  item: string;
+  detail: string;
+  amount: number;
+}
+
+export interface BudgetProfessionalFee {
+  item: string;
+  description: string;
+  amount: number;
+}
+
+export interface BudgetTimelineItem {
+  range: string;
+  activity: string;
+}
+
+export interface BudgetPaymentTerm {
+  label: string;
+  details: string;
+}
+
 export interface ServiceTask {
   id: string;
   clientId: string;
@@ -96,6 +123,16 @@ export interface Budget {
   notes?: string;
   status?: 'pending' | 'approved' | 'rejected';
   type?: 'device' | 'support' | 'service' | 'project';
+  
+  // Elaborated Fields for Project/Services:
+  title?: string;
+  summary?: string;
+  scope?: BudgetScopeSection[];
+  directCosts?: BudgetDirectCost[];
+  professionalFees?: BudgetProfessionalFee[];
+  timeline?: BudgetTimelineItem[];
+  paymentTerms?: BudgetPaymentTerm[];
+  validityDays?: number;
 }
 
 export interface ServiceType {
