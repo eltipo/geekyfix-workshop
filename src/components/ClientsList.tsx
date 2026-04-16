@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { Client, Tool } from "../types";
-import { UserPlus, Phone, Mail, Edit2, Trash2, X, AlertCircle, MessageCircle, ExternalLink, Share2, Plus, Monitor, Search, SortAsc, SortDesc, MapPin, Download, Upload, FileJson, ChevronRight, Camera, ClipboardList, Copy } from "lucide-react";
+import { UserPlus, Phone, Mail, Edit2, Trash2, X, AlertCircle, MessageCircle, ExternalLink, Share2, Plus, Monitor, Search, SortAsc, SortDesc, MapPin, Download, Upload, FileJson, ChevronRight, Camera, ClipboardList, Copy, Folder, ReceiptText } from "lucide-react";
 import { Modal } from "./Modal";
 
 export function ClientsList({ 
   appMode,
   onSelectClient, 
   onSelectClientTasks, 
-  initialClientId 
+  initialClientId,
+  setCurrentTab,
+  setSelectedBudgetId
 }: { 
   appMode: "workshop" | "project",
   onSelectClient: (id: string) => void, 
   onSelectClientTasks?: (id: string) => void, 
-  initialClientId?: string 
+  initialClientId?: string,
+  setCurrentTab: (tab: any) => void,
+  setSelectedBudgetId: (id: string | undefined) => void
 }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
@@ -425,7 +429,7 @@ export function ClientsList({
                   <button
                     onClick={(e) => { e.stopPropagation(); setMapAddress(client.address!); }}
                     className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors"
-                    title="Ver Mapa"
+                    title="Mapa"
                   >
                     <MapPin size={18} />
                   </button>
@@ -433,7 +437,7 @@ export function ClientsList({
                 <button 
                   onClick={(e) => { e.stopPropagation(); onSelectClient(client.id); }}
                   className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors"
-                  title="Ver Equipos"
+                  title="Equipos"
                 >
                   <Monitor size={18} />
                 </button>
@@ -625,16 +629,25 @@ export function ClientsList({
                   onClick={() => onSelectClient(selectedClientDetail.id)}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
-                  <Monitor size={20} />
-                  Ver Equipos
+                  {appMode === 'project' ? <Folder size={20} /> : <Monitor size={20} />}
+                  {appMode === 'project' ? 'Proyectos' : 'Equipos'}
                 </button>
                 <button
-                  onClick={() => onSelectClientTasks?.(selectedClientDetail.id)}
+                  onClick={() => { setSelectedBudgetId(undefined); setCurrentTab("budgets"); }}
                   className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-purple-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
-                  <ClipboardList size={20} />
-                  Ver Tareas
+                  {appMode === 'project' ? <ReceiptText size={20} /> : <ClipboardList size={20} />}
+                  {appMode === 'project' ? 'Presupuestos' : 'Tareas'}
                 </button>
+                {appMode === 'project' && (
+                  <button
+                    onClick={() => onSelectClientTasks?.(selectedClientDetail.id)}
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <ClipboardList size={20} />
+                    Tareas
+                  </button>
+                )}
                 {selectedClientDetail.whatsapp && (
                   <a
                     href={`https://wa.me/${selectedClientDetail.whatsapp.replace(/\D/g, '')}`}
@@ -647,27 +660,29 @@ export function ClientsList({
                   </a>
                 )}
               </div>
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-row gap-3">
                 <button
                   onClick={() => { setEditingClient(selectedClientDetail); setSelectedClientDetail(null); }}
-                  className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 py-3 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 py-2 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2 text-xs"
+                  title="Editar Cliente"
                 >
-                  <Edit2 size={20} />
+                  <Edit2 size={16} />
                   Editar
                 </button>
                 <button
                   onClick={() => handleCloneClient(selectedClientDetail)}
-                  className="flex-1 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-600 dark:text-purple-400 py-3 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="flex-1 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-600 dark:text-purple-400 py-2 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2 text-xs"
                   title={`Clonar a ${selectedClientDetail.type === 'workshop' ? 'Proyectos' : 'Workshop'}`}
                 >
-                  <Copy size={20} />
+                  <Copy size={16} />
                   Clonar
                 </button>
                 <button
                   onClick={() => { setClientToDelete(selectedClientDetail); setSelectedClientDetail(null); }}
-                  className="flex-1 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 py-3 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="flex-1 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 py-2 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2 text-xs"
+                  title="Eliminar Cliente"
                 >
-                  <Trash2 size={20} />
+                  <Trash2 size={16} />
                   Eliminar
                 </button>
               </div>

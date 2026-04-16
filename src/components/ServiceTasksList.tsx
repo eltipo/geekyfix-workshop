@@ -4,7 +4,7 @@ import { ServiceTask, Client, Budget } from "../types";
 import { Plus, Trash2, Edit2, CheckCircle2, Clock, X, MessageCircle, Calendar, DollarSign, Timer, FileText } from "lucide-react";
 import { Modal } from "./Modal";
 
-export function ServiceTasksList({ clientId }: { clientId?: string }) {
+export function ServiceTasksList({ clientId, projectId }: { clientId?: string, projectId?: string }) {
   const [tasks, setTasks] = useState<ServiceTask[]>([]);
   const [clients, setClients] = useState<Record<string, Client>>({});
   const [showForm, setShowForm] = useState(false);
@@ -29,7 +29,11 @@ export function ServiceTasksList({ clientId }: { clientId?: string }) {
     }
   };
 
-  const filteredTasks = tasks.filter(t => !clientId || t.clientId === clientId);
+  const filteredTasks = tasks.filter(t => {
+    if (projectId) return t.projectId === projectId;
+    if (clientId) return t.clientId === clientId;
+    return true;
+  });
 
   return (
     <div className="space-y-4">
@@ -94,6 +98,7 @@ export function ServiceTasksList({ clientId }: { clientId?: string }) {
         <ServiceTaskForm
           initialData={editingTask || undefined}
           clientId={clientId}
+          projectId={projectId}
           clients={Object.values(clients)}
           onSuccess={handleTaskSaved}
           onCancel={() => { setShowForm(false); setEditingTask(null); }}
@@ -124,8 +129,9 @@ export function ServiceTasksList({ clientId }: { clientId?: string }) {
   );
 }
 
-function ServiceTaskForm({ initialData, clientId, clients, onSuccess, onCancel }: { initialData?: ServiceTask, clientId?: string, clients: Client[], onSuccess: (t: ServiceTask) => void, onCancel: () => void }) {
+function ServiceTaskForm({ initialData, clientId, projectId, clients, onSuccess, onCancel }: { initialData?: ServiceTask, clientId?: string, projectId?: string, clients: Client[], onSuccess: (t: ServiceTask) => void, onCancel: () => void }) {
   const [selectedClientId, setSelectedClientId] = useState(clientId || initialData?.clientId || "");
+  const [selectedProjectId, setSelectedProjectId] = useState(projectId || initialData?.projectId || "");
   const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState(initialData?.description || "");
   const [duration, setDuration] = useState(initialData?.duration || "");
@@ -138,7 +144,7 @@ function ServiceTaskForm({ initialData, clientId, clients, onSuccess, onCancel }
     if (!selectedClientId) return;
     setIsSubmitting(true);
     try {
-      const taskData = { clientId: selectedClientId, date, description, duration, amount, isCompleted };
+      const taskData = { clientId: selectedClientId, projectId: selectedProjectId || undefined, date, description, duration, amount, isCompleted };
       let saved;
       if (initialData) {
         saved = await api.updateServiceTask(initialData.id, taskData);

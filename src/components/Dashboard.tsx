@@ -201,7 +201,7 @@ export function Dashboard({
                   onClick={() => onNavigate("report")}
                   className="w-full py-2 text-sm text-blue-600 dark:text-blue-400 font-semibold hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
                 >
-                  Ver Reporte Diario Completo &rarr;
+                  Reporte Diario Completo &rarr;
                 </button>
               </div>
             </div>

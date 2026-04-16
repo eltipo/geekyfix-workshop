@@ -3,6 +3,7 @@ import { api } from "../api";
 import { Project, Client, ProjectDoc, Budget } from "../types";
 import { Plus, Folder, FileText, Image as ImageIcon, Link as LinkIcon, Trash2, Edit2, ExternalLink, Calendar, User, Upload, X, CheckCircle2, Clock, AlertCircle, Copy, Camera, Maximize2, ReceiptText, ChevronRight } from "lucide-react";
 import { Modal } from "./Modal";
+import { ServiceTasksList } from "./ServiceTasksList";
 
 export function ProjectsList({ clientId, onNavigateToBudget }: { clientId?: string, onNavigateToBudget?: (budgetId: string) => void }) {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -365,34 +366,35 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
   return (
     <Modal isOpen={true} onClose={onClose} title={project.name} maxWidth="max-w-4xl">
       <div className="flex flex-col h-[80vh]">
-        <div className="p-6 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-6 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
             <div className="flex flex-wrap gap-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                  <User size={20} />
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Cliente</p>
-                  <div className="flex items-center gap-2">
-                    <p className="font-bold text-gray-900 dark:text-gray-100">{client ? `${client.firstName} ${client.lastName}` : "N/A"}</p>
-                    {client && (
-                      <button
-                        onClick={handleClone}
-                        className="p-1 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
-                        title={`Clonar cliente a ${client.type === 'workshop' ? 'Proyectos' : 'Workshop'}`}
-                      >
-                        <Copy size={14} />
-                      </button>
-                    )}
-                  </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                <User size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Cliente</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-gray-900 dark:text-gray-100">{client ? `${client.firstName} ${client.lastName}` : "N/A"}</p>
+                  {client && (
+                    <button
+                      onClick={handleClone}
+                      className="p-1 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
+                      title={`Clonar cliente a ${client.type === 'workshop' ? 'Proyectos' : 'Workshop'}`}
+                    >
+                      <Copy size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
-              {clonedStatus && (
-                <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 px-3 py-1 rounded-lg border border-green-100 dark:border-green-800 animate-in fade-in slide-in-from-left-2">
-                  <CheckCircle2 size={14} className="text-green-600 dark:text-green-400" />
-                  <span className="text-xs font-bold text-green-600 dark:text-green-400">{clonedStatus}</span>
-                </div>
-              )}
+            </div>
+            {clonedStatus && (
+              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 px-3 py-1 rounded-lg border border-green-100 dark:border-green-800 animate-in fade-in slide-in-from-left-2">
+                <CheckCircle2 size={14} className="text-green-600 dark:text-green-400" />
+                <span className="text-xs font-bold text-green-600 dark:text-green-400">{clonedStatus}</span>
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
                 <Calendar size={20} />
@@ -513,23 +515,28 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
             </div>
           </div>
         </div>
+          
+        <div className="p-6 space-y-8">
+            <div>
+              <ServiceTasksList projectId={project.id} clientId={project.clientId} />
+            </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h4 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              <FileText size={20} className="text-blue-500" />
-              Documentación
-            </h4>
-            <button 
-              onClick={() => setShowUpload(true)}
-              className="text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-100 transition-all flex items-center gap-2"
-            >
-              <Upload size={16} /> Agregar Documento
-            </button>
-          </div>
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h4 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <FileText size={20} className="text-blue-500" />
+                Documentación
+              </h4>
+              <button 
+                onClick={() => setShowUpload(true)}
+                className="text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-100 transition-all flex items-center gap-2"
+              >
+                <Upload size={16} /> Agregar Documento
+              </button>
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {project.documents.map(doc => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {project.documents.map(doc => {
               const isImage = doc.type === 'image';
               const Content = (
                 <div className="flex flex-col gap-3">
@@ -594,8 +601,10 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
             )}
           </div>
         </div>
+      </div>
+    </div>
 
-        <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex justify-end">
+    <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex justify-end">
           <button onClick={onClose} className="px-6 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-200 transition-all">
             Cerrar
           </button>

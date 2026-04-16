@@ -155,7 +155,7 @@ export function DailyReport() {
               <Smartphone className="text-blue-400 dark:text-blue-600 group-hover:scale-110 transition-transform" size={24} />
             </div>
             <div className="mt-auto pt-3 flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase">
-              Ver detalles <ChevronRight size={12} />
+              Detalles <ChevronRight size={12} />
             </div>
           </button>
 
@@ -171,7 +171,7 @@ export function DailyReport() {
               <ReceiptText className="text-green-400 dark:text-green-600 group-hover:scale-110 transition-transform" size={24} />
             </div>
             <div className="mt-auto pt-3 flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400 uppercase">
-              Ver detalles <ChevronRight size={12} />
+              Detalles <ChevronRight size={12} />
             </div>
           </button>
 
@@ -187,7 +187,7 @@ export function DailyReport() {
               <TrendingUp className="text-purple-400 dark:text-purple-600 group-hover:scale-110 transition-transform" size={24} />
             </div>
             <div className="mt-auto pt-3 flex items-center gap-1 text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">
-              Ver desglose <ChevronRight size={12} />
+              Desglose <ChevronRight size={12} />
             </div>
           </button>
         </div>

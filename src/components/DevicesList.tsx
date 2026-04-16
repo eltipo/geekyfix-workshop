@@ -448,7 +448,7 @@ export function DevicesList({
                   }`}
                 >
                   <Clock size={12} />
-                  {ticketFilter === 'pending' ? 'Solo Pendientes' : 'Ver Pendientes'}
+                  {ticketFilter === 'pending' ? 'Solo Pendientes' : 'Pendientes'}
                 </button>
               </div>
               <button 
@@ -848,7 +848,7 @@ export function DevicesList({
                   rel="noreferrer" 
                   className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
                 >
-                  Ver en tamaño completo
+                  Tamaño completo
                 </a>
               </div>
               <button
@@ -1431,7 +1431,7 @@ function DeviceForm({
                   }} 
                   className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium"
                 >
-                  Ver datos cargados
+                  Datos cargados
                 </button>
               )}
             </div>
@@ -1468,7 +1468,7 @@ function DeviceForm({
                   }} 
                   className="text-sm text-purple-600 dark:text-purple-400 hover:underline font-medium"
                 >
-                  Ver datos cargados
+                  Datos cargados
                 </button>
               )}
             </div>

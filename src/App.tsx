@@ -246,6 +246,8 @@ export default function App() {
               onSelectClient={handleSelectClient} 
               onSelectClientTasks={(id) => { setSelectedClientId(id); setCurrentTab("tasks"); }}
               initialClientId={selectedClientId}
+              setCurrentTab={setCurrentTab}
+              setSelectedBudgetId={setSelectedBudgetId}
             />
           )}
           {currentTab === "devices" && (
@@ -258,7 +260,7 @@ export default function App() {
                   }}
                   className="mb-4 text-sm text-blue-600 dark:text-blue-400 hover:underline"
                 >
-                  &larr; Ver todos los equipos
+                  &larr; Todos los equipos
                 </button>
               )}
               <DevicesList 
@@ -302,7 +304,7 @@ export default function App() {
                   onClick={() => setSelectedClientId(undefined)}
                   className="mb-4 text-sm text-blue-600 dark:text-blue-400 hover:underline"
                 >
-                  &larr; Ver todas las tareas
+                  &larr; Todas las tareas
                 </button>
               )}
               <ServiceTasksList clientId={selectedClientId} />
@@ -378,6 +380,13 @@ export default function App() {
               >
                 <Folder size={18} />
                 <span className="text-[8px] mt-0.5 font-medium truncate text-center">Proyec.</span>
+              </button>
+              <button
+                onClick={() => setCurrentTab("tasks")}
+                className={`flex flex-col items-center justify-center p-2 min-w-[64px] ${currentTab === "tasks" ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`}
+              >
+                <ClipboardList size={18} />
+                <span className="text-[8px] mt-0.5 font-medium truncate text-center">Tareas</span>
               </button>
               <button
                 onClick={() => setCurrentTab("budgets")}

@@ -57,6 +57,7 @@ export interface BudgetItem {
 export interface ServiceTask {
   id: string;
   clientId: string;
+  projectId?: string;
   date: string;
   description: string;
   duration: string;
