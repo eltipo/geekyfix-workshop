@@ -29,9 +29,7 @@ export function BudgetsList({
   const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
-    if (initialBudgetId) {
-      setSelectedBudgetId(initialBudgetId);
-    }
+    setSelectedBudgetId(initialBudgetId || null);
   }, [initialBudgetId]);
 
   useEffect(() => {
@@ -1099,7 +1097,7 @@ function BudgetForm({
       )}
 
       {activeTab === 'scope' && type === 'project' && (
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto p-1">
+        <div className="space-y-4 p-1">
           <div className="flex justify-between items-center">
             <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Alcance de los Servicios</h4>
             <button type="button" onClick={addScopeSection} className="text-xs text-indigo-600 font-bold flex items-center gap-1"><Plus size={14} /> Nueva Sección</button>
@@ -1126,7 +1124,7 @@ function BudgetForm({
       )}
 
       {activeTab === 'economics' && type === 'project' && (
-        <div className="space-y-6 max-h-[60vh] overflow-y-auto p-1">
+        <div className="space-y-6 p-1">
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Costos Directos (Proveedores)</h4>

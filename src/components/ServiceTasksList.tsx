@@ -10,6 +10,8 @@ export function ServiceTasksList({ clientId, projectId }: { clientId?: string, p
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<ServiceTask | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([api.getServiceTasks(), api.getClients()]).then(([ts, clis]) => {
@@ -19,79 +21,170 @@ export function ServiceTasksList({ clientId, projectId }: { clientId?: string, p
     });
   }, []);
 
+  const handleToggleCompleted = async (e: React.MouseEvent, task: ServiceTask) => {
+    e.stopPropagation();
+    setIsUpdatingStatus(task.id);
+    try {
+      const updated = await api.updateServiceTask(task.id, { ...task, isCompleted: !task.isCompleted });
+      setTasks(tasks.map(t => t.id === updated.id ? updated : t));
+    } catch (error) {
+      console.error("Error updating status", error);
+    } finally {
+      setIsUpdatingStatus(null);
+    }
+  };
+
   const handleTaskSaved = (task: ServiceTask) => {
     if (editingTask) {
       setTasks(tasks.map(t => t.id === task.id ? task : t));
       setEditingTask(null);
     } else {
-      setTasks([...tasks, task]);
+      setTasks([...tasks.filter(t => t.id !== task.id), task]);
       setShowForm(false);
     }
   };
 
-  const filteredTasks = tasks.filter(t => {
-    if (projectId) return t.projectId === projectId;
-    if (clientId) return t.clientId === clientId;
-    return true;
-  });
+  const filteredTasks = tasks
+    .filter(t => {
+      if (projectId) return t.projectId === projectId;
+      if (clientId) return t.clientId === clientId;
+      return true;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Tareas de Servicio</h2>
+      <div className="flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50 p-2 rounded-xl border border-gray-100 dark:border-gray-800">
+        <h2 className="text-base font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 pl-2">
+          <CheckCircle2 size={18} className="text-blue-500" />
+          Tareas Realizadas
+        </h2>
         <button
           onClick={() => setShowForm(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-bold transition-all shadow-sm"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-bold transition-all shadow-sm active:scale-95"
         >
-          <Plus size={16} /> Nueva Tarea
+          <Plus size={14} /> Nueva Tarea
         </button>
       </div>
 
-      <div className="grid gap-3">
+      <div className="grid gap-2">
         {filteredTasks.length === 0 && (
-          <p className="text-gray-500 dark:text-gray-400 text-center py-8 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
+          <p className="text-gray-500 dark:text-gray-400 text-center py-6 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 text-sm">
             No hay tareas registradas.
           </p>
         )}
-        {filteredTasks.map((task) => (
-          <div key={task.id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:border-blue-300 transition-all group">
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border ${task.isCompleted ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'}`}>
-                    {task.isCompleted ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                    {task.isCompleted ? "Completado" : "Pendiente"}
-                  </span>
-                  <span className="text-xs text-gray-400 dark:text-gray-500">• {task.date}</span>
+        {filteredTasks.map((task) => {
+          const isExpanded = expandedTaskId === task.id;
+          return (
+            <div 
+              key={task.id} 
+              onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
+              className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border transition-all cursor-pointer overflow-hidden ${
+                task.isCompleted 
+                  ? 'border-gray-100 dark:border-gray-700 opacity-75' 
+                  : 'border-blue-100 dark:border-blue-900 shadow-blue-500/5'
+              } ${isExpanded ? 'ring-2 ring-blue-500/20' : 'hover:border-blue-300'}`}
+            >
+              {/* Collapsed State Bar */}
+              <div className="flex items-center gap-3 p-3">
+                <button
+                  onClick={(e) => handleToggleCompleted(e, task)}
+                  disabled={isUpdatingStatus === task.id}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all shrink-0 ${
+                    task.isCompleted 
+                      ? 'bg-green-500 border-green-500 text-white' 
+                      : 'border-gray-200 dark:border-gray-600 hover:border-blue-400'
+                  }`}
+                >
+                  {isUpdatingStatus === task.id ? (
+                    <Clock size={12} className="animate-spin" />
+                  ) : (
+                    task.isCompleted && <CheckCircle2 size={16} />
+                  )}
+                </button>
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className={`text-sm font-medium truncate ${task.isCompleted ? 'text-gray-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
+                      {task.description}
+                    </p>
+                    {isExpanded && (
+                      <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 px-1.5 py-0.5 rounded font-mono">
+                        #{task.id.slice(0,4)}
+                      </span>
+                    )}
+                  </div>
+                  {!isExpanded && (
+                    <div className="flex items-center gap-3 mt-0.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                      <span>{task.date}</span>
+                      <span>•</span>
+                      <span>${task.amount.toLocaleString()}</span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1"><Timer size={10} /> {task.duration}</span>
+                    </div>
+                  )}
                 </div>
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">{task.description}</h3>
-                {!clientId && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    Cliente: <span className="font-medium text-blue-600 dark:text-blue-400">{clients[task.clientId]?.firstName} {clients[task.clientId]?.lastName}</span>
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-4 mt-3">
-                  <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
-                    <Timer size={14} className="text-blue-500" />
-                    <span>{task.duration}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
-                    <DollarSign size={14} className="text-green-500" />
-                    <span className="font-bold text-gray-900 dark:text-gray-100">${task.amount.toLocaleString()}</span>
-                  </div>
+                
+                <div className="flex items-center gap-1">
+                  {!isExpanded && (
+                    <FileText size={16} className="text-gray-300" />
+                  )}
                 </div>
               </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => setEditingTask(task)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg">
-                  <Edit2 size={16} />
-                </button>
-                <button onClick={() => setTaskToDelete(task.id)} className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
-                  <Trash2 size={16} />
-                </button>
-              </div>
+
+              {/* Expanded Details */}
+              {isExpanded && (
+                <div className="bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800 p-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">Fecha Realizada</p>
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                        <Calendar size={14} className="text-blue-500" />
+                        {task.date}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">Tiempo Empleado</p>
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                        <Timer size={14} className="text-purple-500" />
+                        {task.duration}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">Monto Cobrado</p>
+                      <div className="flex items-center gap-2 text-sm font-bold text-green-600 dark:text-green-400">
+                        <DollarSign size={14} />
+                        ${task.amount.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Detalle del Servicio</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-100 dark:border-gray-700">
+                      {task.description}
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setTaskToDelete(task.id); }}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={14} /> Eliminar
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setEditingTask(task); }}
+                      className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all active:scale-95"
+                    >
+                      <Edit2 size={14} /> Editar Tarea
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {(showForm || editingTask) && (

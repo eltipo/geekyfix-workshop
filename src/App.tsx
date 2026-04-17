@@ -36,6 +36,70 @@ export default function App() {
 
   const [showFooter, setShowFooter] = useState(!isMobile);
 
+  // Synchronize state with URL hash for better browser history behavior (fixes mobile back button)
+  useEffect(() => {
+    const handlePopState = () => {
+      const hash = window.location.hash.replace('#', '');
+      
+      // Default values
+      let newTab: any = "home";
+      let newClientId: string | undefined = undefined;
+      let newDeviceId: string | undefined = undefined;
+      let newProjectId: string | undefined = undefined;
+      let newBudgetId: string | undefined = undefined;
+
+      if (hash) {
+        const parts = hash.split('/');
+        const tab = parts[0] as any;
+        const id = parts[1];
+
+        const validTabs = ["home", "clients", "devices", "report", "tools", "budgets", "settings", "calendar", "tasks", "projects"];
+        if (validTabs.includes(tab)) {
+          newTab = tab;
+          if (tab === "clients") {
+            newClientId = id;
+          } else if (tab === "devices") {
+            if (parts[1] === 'client' && parts[2]) {
+              newClientId = parts[2];
+            } else {
+              newDeviceId = id;
+            }
+          } else if (tab === "projects") {
+            newProjectId = id;
+          } else if (tab === "budgets") {
+            newBudgetId = id;
+          }
+        }
+      }
+
+      setCurrentTab(newTab);
+      setSelectedClientId(newClientId);
+      setSelectedDeviceId(newDeviceId);
+      setSelectedProjectId(newProjectId);
+      setSelectedBudgetId(newBudgetId);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    handlePopState(); // Execute on mount
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    let hash = `#${currentTab}`;
+    if (currentTab === "clients" && selectedClientId) hash += `/${selectedClientId}`;
+    if (currentTab === "devices") {
+       if (selectedDeviceId) hash += `/${selectedDeviceId}`;
+       else if (selectedClientId) hash += `/client/${selectedClientId}`;
+    }
+    if (currentTab === "projects" && selectedProjectId) hash += `/${selectedProjectId}`;
+    if (currentTab === "budgets" && selectedBudgetId) hash += `/${selectedBudgetId}`;
+
+    if (window.location.hash !== hash) {
+      window.history.pushState(null, "", hash);
+    }
+  }, [currentTab, selectedClientId, selectedDeviceId, selectedProjectId, selectedBudgetId]);
+
   useEffect(() => {
     localStorage.setItem('appMode', appMode);
   }, [appMode]);
@@ -77,7 +141,7 @@ export default function App() {
 
   const handleSelectClient = (id: string) => {
     setSelectedClientId(id);
-    setCurrentTab("devices");
+    setCurrentTab(appMode === 'project' ? "projects" : "devices");
   };
 
   return (
@@ -231,7 +295,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto scroll-smooth relative no-scrollbar-mobile">
+      <main className="flex-1 overflow-y-auto scroll-smooth relative scrollbar-hide">
         <div className={`w-full max-w-3xl mx-auto p-3 sm:p-4 ${showFooter ? 'pb-32' : 'pb-10'} text-gray-900 dark:text-gray-100 transition-all duration-300`}>
           {currentTab === "home" && (
             <Dashboard 

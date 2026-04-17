@@ -34,6 +34,8 @@ export function ProjectsList({
       if (project) {
         setSelectedProject(project);
       }
+    } else if (!initialProjectId) {
+      setSelectedProject(null);
     }
   }, [initialProjectId, projects]);
 
@@ -359,10 +361,10 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
 
   return (
     <Modal isOpen={true} onClose={onClose} title={project.name} maxWidth="max-w-4xl">
-      <div className="flex flex-col h-[80vh]">
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-6 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
-            <div className="flex flex-wrap gap-6">
+      <div className="flex flex-col h-[85vh]">
+        <div className="flex-1 overflow-y-auto scrollbar-hide">
+          <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
+            <div className="flex flex-wrap gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
                 <User size={20} />
@@ -394,12 +396,12 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
             </div>
           </div>
           {project.description && (
-            <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+            <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
               <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{project.description}</p>
             </div>
           )}
           
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <div className="flex justify-between items-center mb-2">
                 <h4 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -495,13 +497,13 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
           </div>
         </div>
           
-        <div className="p-6 space-y-8">
+        <div className="p-4 pt-0 space-y-4">
             <div>
               <ServiceTasksList projectId={project.id} clientId={project.clientId} />
             </div>
 
           <div>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-3">
               <h4 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <FileText size={20} className="text-blue-500" />
                 Documentación

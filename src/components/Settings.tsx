@@ -13,8 +13,9 @@ export function Settings() {
   const [newService, setNewService] = useState({ name: "", defaultPrice: 0 });
   const [showAboutModal, setShowAboutModal] = useState(false);
 
-  const APP_VERSION = "v1.4.5";
+  const APP_VERSION = "v1.5.0";
   const CHANGELOG = [
+    { version: "v1.5.0", date: "2026-04-16", changes: ["Gestión inteligente de historial (botón atrás móvil)", "Duplicado rápido de presupuestos", "Mejoras críticas en PDF (saltos de página y formato)", "Navegación dinámica entre Clientes/Proyectos"] },
     { version: "v1.4.5", date: "2026-04-13", changes: ["Integración de presupuestos con tickets", "Mejoras en navegación móvil (7 columnas)", "Alineación de botones en configuración"] },
     { version: "v1.4.0", date: "2026-04-12", changes: ["Reporte diario interactivo con modales", "Gestión de tipos de trabajo y precios"] },
     { version: "v1.3.0", date: "2026-04-10", changes: ["Sistema de respaldo y restauración", "Navegación directa entre clientes y equipos"] },

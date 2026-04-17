@@ -37,15 +37,18 @@ export function ClientsList({
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    api.getClients().then(clis => {
-      setClients(clis);
-      if (initialClientId) {
-        const client = clis.find(c => c.id === initialClientId);
-        if (client) setSelectedClientDetail(client);
-      }
-    });
+    api.getClients().then(setClients);
     api.getTools().then(setTools);
-  }, [initialClientId]);
+  }, []);
+
+  useEffect(() => {
+    if (initialClientId && clients.length > 0) {
+      const client = clients.find(c => c.id === initialClientId);
+      if (client) setSelectedClientDetail(client);
+    } else if (!initialClientId) {
+      setSelectedClientDetail(null);
+    }
+  }, [initialClientId, clients]);
 
   const filteredClients = clients
     .filter((client) => {
@@ -437,9 +440,9 @@ export function ClientsList({
                 <button 
                   onClick={(e) => { e.stopPropagation(); onSelectClient(client.id); }}
                   className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors"
-                  title="Equipos"
+                  title={appMode === 'project' ? "Proyectos" : "Equipos"}
                 >
-                  <Monitor size={18} />
+                  {appMode === 'project' ? <Folder size={18} /> : <Monitor size={18} />}
                 </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); setEditingClient(client); }}
