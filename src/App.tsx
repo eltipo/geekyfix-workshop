@@ -25,6 +25,7 @@ export default function App() {
     return (localStorage.getItem('deviceFilter') as DeviceFilterStatus) || 'all';
   });
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [clientFormOpen, setClientFormOpen] = useState(false);
   
   // Detect if mobile for default footer state
   const [isMobile, setIsMobile] = useState(() => {
@@ -138,6 +139,12 @@ export default function App() {
       localStorage.setItem('darkMode', 'false');
     }
   }, [isDarkMode]);
+
+  useEffect(() => {
+    if (currentTab !== "clients") {
+      setClientFormOpen(false);
+    }
+  }, [currentTab]);
 
   const handleSelectClient = (id: string) => {
     setSelectedClientId(id);
@@ -317,6 +324,7 @@ export default function App() {
               initialClientId={selectedClientId}
               setCurrentTab={setCurrentTab}
               setSelectedBudgetId={setSelectedBudgetId}
+              initialShowForm={clientFormOpen}
             />
           )}
           {currentTab === "devices" && (
@@ -387,6 +395,11 @@ export default function App() {
               onNavigateToBudget={(budgetId) => {
                 setSelectedBudgetId(budgetId);
                 setCurrentTab("budgets");
+              }}
+              onNavigateToClients={() => {
+                setClientFormOpen(true);
+                setCurrentTab("clients");
+                setSelectedClientId(undefined);
               }}
             />
           )}

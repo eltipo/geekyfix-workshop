@@ -1,18 +1,23 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { Project, Client, ProjectDoc, Budget } from "../types";
-import { Plus, Folder, FileText, Image as ImageIcon, Link as LinkIcon, Trash2, Edit2, ExternalLink, Calendar, User, Upload, X, CheckCircle2, Clock, AlertCircle, Camera, Maximize2, ReceiptText, ChevronRight } from "lucide-react";
+import { Plus, Folder, FileText, Image as ImageIcon, Link as LinkIcon, Trash2, Edit2, ExternalLink, Calendar, User, Upload, X, CheckCircle2, Clock, AlertCircle, Camera, Maximize2, ReceiptText, ChevronRight, FileDown } from "lucide-react";
 import { Modal } from "./Modal";
 import { ServiceTasksList } from "./ServiceTasksList";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { getBase64ImageFromUrl } from "../lib/utils";
 
 export function ProjectsList({ 
   clientId, 
   onNavigateToBudget,
   initialProjectId,
-  onClose
+  onClose,
+  onNavigateToClients
 }: { 
   clientId?: string, 
   onNavigateToBudget?: (budgetId: string) => void,
+  onNavigateToClients?: () => void,
   initialProjectId?: string,
   onClose?: () => void
 }) {
@@ -196,6 +201,7 @@ export function ProjectsList({
           initialData={editingProject || undefined}
           onSave={handleSaveProject}
           onCancel={() => { setShowForm(false); setEditingProject(null); }}
+          onNavigateToClients={onNavigateToClients}
         />
       )}
 
@@ -218,7 +224,7 @@ export function ProjectsList({
   );
 }
 
-function ProjectForm({ clients, initialData, onSave, onCancel }: { clients: Client[], initialData?: Project, onSave: (p: Partial<Project>) => void, onCancel: () => void }) {
+function ProjectForm({ clients, initialData, onSave, onCancel, onNavigateToClients }: { clients: Client[], initialData?: Project, onSave: (p: Partial<Project>) => void, onCancel: () => void, onNavigateToClients?: () => void }) {
   const [name, setName] = useState(initialData?.name || "");
   const [clientId, setClientId] = useState(initialData?.clientId || "");
   const [startDate, setStartDate] = useState(initialData?.startDate || new Date().toISOString().split('T')[0]);
@@ -246,7 +252,18 @@ function ProjectForm({ clients, initialData, onSave, onCancel }: { clients: Clie
         </div>
 
         <div>
-          <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Cliente</label>
+          <div className="flex justify-between items-center mb-1">
+            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Cliente</label>
+            {onNavigateToClients && (
+              <button 
+                type="button"
+                onClick={onNavigateToClients}
+                className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800 transition-all"
+              >
+                + Nuevo Cliente
+              </button>
+            )}
+          </div>
           <select 
             required
             value={clientId}
@@ -258,6 +275,9 @@ function ProjectForm({ clients, initialData, onSave, onCancel }: { clients: Clie
               <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
             ))}
           </select>
+          {clients.length === 0 && (
+            <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium">No hay clientes de tipo 'Proyecto' registrados.</p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -320,6 +340,7 @@ function ProjectForm({ clients, initialData, onSave, onCancel }: { clients: Clie
 
 function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpdateProject, onNavigateToBudget, isUploading }: { project: Project, client?: Client, budgets: Budget[], onClose: () => void, onUploadDocs: (files: FileList | null, links: { name: string, url: string }[]) => void, onUpdateProject: (data: Partial<Project>) => void, onNavigateToBudget?: (budgetId: string) => void, isUploading: boolean }) {
   const [showUpload, setShowUpload] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [newLinks, setNewLinks] = useState<{ name: string, url: string }[]>([]);
   const [linkName, setLinkName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
@@ -359,42 +380,213 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
     setNewLinks([]);
   };
 
+  const handleExportProject = async () => {
+    setIsExporting(true);
+    try {
+      const tasks = await api.getServiceTasks();
+      const projectTasks = tasks.filter(t => t.projectId === project.id);
+      
+      const doc = new jsPDF();
+      let yPos = 20;
+
+      // Header
+      doc.setFontSize(22);
+      doc.setTextColor(37, 99, 235); // blue-600
+      doc.text("Resumen de Proyecto", 20, yPos);
+      yPos += 15;
+
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text(project.name, 20, yPos);
+      yPos += 10;
+
+      // Basic Info Table
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Detalle', 'Información']],
+        body: [
+          ['Cliente', client ? `${client.firstName} ${client.lastName}` : 'N/A'],
+          ['Fecha Inicio', project.startDate],
+          ['Estado', project.status.toUpperCase()],
+          ['Descripción', project.description || 'Sin descripción'],
+        ],
+        theme: 'striped',
+        headStyles: { fillColor: [37, 99, 235] }
+      });
+      yPos = (doc as any).lastAutoTable.finalY + 15;
+
+      // Notes
+      if (project.notes) {
+        doc.setFontSize(14);
+        doc.text("Notas del Proyecto", 20, yPos);
+        yPos += 7;
+        doc.setFontSize(10);
+        const splitNotes = doc.splitTextToSize(project.notes, 170);
+        doc.text(splitNotes, 20, yPos);
+        yPos += (splitNotes.length * 5) + 10;
+      }
+
+      // Budgets
+      if (budgets.length > 0) {
+        doc.setFontSize(14);
+        doc.text("Presupuestos", 20, yPos);
+        yPos += 5;
+        autoTable(doc, {
+          startY: yPos,
+          head: [['ID', 'Fecha', 'Monto', 'Estado']],
+          body: budgets.map(b => [
+            b.id.substring(0, 8),
+            b.date,
+            `$${b.total.toLocaleString()}`,
+            b.status === 'approved' ? 'Aprobado' : b.status === 'rejected' ? 'Rechazado' : 'Pendiente'
+          ]),
+          theme: 'grid',
+          headStyles: { fillColor: [147, 51, 234] } // purple-600
+        });
+        yPos = (doc as any).lastAutoTable.finalY + 15;
+      }
+
+      // Tasks
+      if (projectTasks.length > 0) {
+        if (yPos > 250) { doc.addPage(); yPos = 20; }
+        doc.setFontSize(14);
+        doc.text("Tareas y Servicios", 20, yPos);
+        yPos += 5;
+        autoTable(doc, {
+          startY: yPos,
+          head: [['Fecha', 'Descripción', 'Duración', 'Monto', 'Estado']],
+          body: projectTasks.map(t => [
+            t.date,
+            t.description,
+            t.duration,
+            `$${t.amount.toLocaleString()}`,
+            t.isCompleted ? 'Completada' : 'Pendiente'
+          ]),
+          theme: 'grid',
+          headStyles: { fillColor: [5, 150, 105] } // emerald-600
+        });
+        yPos = (doc as any).lastAutoTable.finalY + 15;
+      }
+
+      // Documentation (Links & Files)
+      const otherDocs = project.documents.filter(d => d.type !== 'image');
+      if (otherDocs.length > 0) {
+        if (yPos > 250) { doc.addPage(); yPos = 20; }
+        doc.setFontSize(14);
+        doc.text("Documentación y Enlaces", 20, yPos);
+        yPos += 5;
+        autoTable(doc, {
+          startY: yPos,
+          head: [['Nombre', 'Tipo', 'Fecha', 'Enlace/Referencia']],
+          body: otherDocs.map(d => [
+            d.name,
+            d.type === 'link' ? 'Enlace' : 'Archivo',
+            d.date,
+            'Link'
+          ]),
+          theme: 'grid',
+          headStyles: { fillColor: [75, 85, 99] }, // gray-600
+          columnStyles: {
+            0: { cellWidth: 42.5 },
+            1: { cellWidth: 42.5 },
+            2: { cellWidth: 42.5 },
+            3: { cellWidth: 42.5, textColor: [37, 99, 235], fontStyle: 'bold' }
+          },
+          didDrawCell: (data) => {
+            if (data.section === 'body' && data.column.index === 3) {
+              const docItem = otherDocs[data.row.index];
+              const url = docItem.url.startsWith('http') ? docItem.url : `https://${docItem.url}`;
+              doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url });
+            }
+          }
+        });
+        yPos = (doc as any).lastAutoTable.finalY + 15;
+      }
+
+      // Documentation & Images
+      const images = project.documents.filter(d => d.type === 'image');
+      if (images.length > 0) {
+        if (yPos > 240) { doc.addPage(); yPos = 20; }
+        doc.setFontSize(14);
+        doc.text("Documentación Fotográfica", 20, yPos);
+        yPos += 10;
+
+        for (const img of images) {
+          try {
+            if (yPos > 200) { doc.addPage(); yPos = 20; }
+            const base64 = await getBase64ImageFromUrl(img.url);
+            // Simple placeholder for image positioning - center and fixed width
+            doc.addImage(base64, 'JPEG', 20, yPos, 170, 95);
+            yPos += 100;
+            doc.setFontSize(8);
+            doc.text(`${img.name} - ${img.date}`, 20, yPos);
+            yPos += 15;
+          } catch (e) {
+            console.warn("Could not add image to PDF", e);
+          }
+        }
+      }
+
+      doc.save(`Proyecto_${project.name.replace(/\s+/g, '_')}.pdf`);
+    } catch (error) {
+      console.error("Error exporting project", error);
+      alert("Error al exportar el proyecto. Por favor intenta de nuevo.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <Modal isOpen={true} onClose={onClose} title={project.name} maxWidth="max-w-4xl">
       <div className="flex flex-col h-[85vh]">
         <div className="flex-1 overflow-y-auto scrollbar-hide">
           <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
-            <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                <User size={20} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Cliente</p>
-                <div className="flex items-center gap-2">
-                  <p className="font-bold text-gray-900 dark:text-gray-100">{client ? `${client.firstName} ${client.lastName}` : "N/A"}</p>
+            <div className="flex justify-between items-start">
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                    <User size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Cliente</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-gray-900 dark:text-gray-100">{client ? `${client.firstName} ${client.lastName}` : "N/A"}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                    <Calendar size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Inicio</p>
+                    <p className="font-bold text-gray-900 dark:text-gray-100">{project.startDate}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Estado</p>
+                    <p className="font-bold text-gray-900 dark:text-gray-100 uppercase text-sm">{project.status}</p>
+                  </div>
                 </div>
               </div>
+              
+              <button 
+                onClick={handleExportProject}
+                disabled={isExporting}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-green-600/20 text-green-700 dark:text-green-400 font-bold text-xs hover:bg-green-50 dark:hover:bg-green-900/20 transition-all ${isExporting ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isExporting ? (
+                  <Clock size={16} className="animate-spin" />
+                ) : (
+                  <FileDown size={16} />
+                )}
+                {isExporting ? 'Exportando...' : 'Exportar Informe'}
+              </button>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
-                <Calendar size={20} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Inicio</p>
-                <p className="font-bold text-gray-900 dark:text-gray-100">{project.startDate}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
-                <CheckCircle2 size={20} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Estado</p>
-                <p className="font-bold text-gray-900 dark:text-gray-100 uppercase text-sm">{project.status}</p>
-              </div>
-            </div>
-          </div>
           {project.description && (
             <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
               <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{project.description}</p>

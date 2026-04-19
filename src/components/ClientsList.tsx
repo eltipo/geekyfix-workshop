@@ -10,18 +10,20 @@ export function ClientsList({
   onSelectClientTasks, 
   initialClientId,
   setCurrentTab,
-  setSelectedBudgetId
+  setSelectedBudgetId,
+  initialShowForm = false
 }: { 
   appMode: "workshop" | "project",
   onSelectClient: (id: string) => void, 
   onSelectClientTasks?: (id: string) => void, 
   initialClientId?: string,
   setCurrentTab: (tab: any) => void,
-  setSelectedBudgetId: (id: string | undefined) => void
+  setSelectedBudgetId: (id: string | undefined) => void,
+  initialShowForm?: boolean
 }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(initialShowForm);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const [selectedClientDetail, setSelectedClientDetail] = useState<Client | null>(null);
