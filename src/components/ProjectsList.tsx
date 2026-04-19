@@ -347,8 +347,7 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [notes, setNotes] = useState(project.notes || "");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [editingDoc, setEditingDoc] = useState<string | null>(null);
-  const [newDocName, setNewDocName] = useState("");
+  const [editingDoc, setEditingDoc] = useState<ProjectDoc | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -390,14 +389,13 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
   };
 
   const startEditingDoc = (doc: ProjectDoc) => {
-    setEditingDoc(doc.id);
-    setNewDocName(doc.name);
+    setEditingDoc({ ...doc });
   };
 
-  const handleRenameDoc = () => {
-    if (!newDocName.trim()) return;
+  const handleUpdateDoc = () => {
+    if (!editingDoc || !editingDoc.name.trim() || !editingDoc.url.trim()) return;
     const updatedDocs = project.documents.map(d => 
-      d.id === editingDoc ? { ...d, name: newDocName } : d
+      d.id === editingDoc.id ? editingDoc : d
     );
     onUpdateProject({ documents: updatedDocs });
     setEditingDoc(null);
@@ -758,32 +756,8 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
                       {isImage ? <ImageIcon size={20} /> : doc.type === 'link' ? <LinkIcon size={20} /> : <FileText size={20} />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      {editingDoc === doc.id ? (
-                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                          <input 
-                            type="text"
-                            value={newDocName}
-                            onChange={e => setNewDocName(e.target.value)}
-                            className="w-full p-1 text-sm rounded border border-blue-300 dark:border-blue-500 bg-white dark:bg-gray-800"
-                            autoFocus
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') handleRenameDoc();
-                              if (e.key === 'Escape') setEditingDoc(null);
-                            }}
-                          />
-                          <button 
-                            onClick={handleRenameDoc}
-                            className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
-                          >
-                            <CheckCircle2 size={16} />
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="font-bold text-gray-900 dark:text-gray-100 text-sm truncate">{doc.name}</p>
-                          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{doc.date}</p>
-                        </>
-                      )}
+                      <p className="font-bold text-gray-900 dark:text-gray-100 text-sm truncate">{doc.name}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{doc.date}</p>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                       <button 
@@ -804,28 +778,22 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
                 </div>
               );
 
-              if (isImage) {
-                return (
-                  <button 
-                    key={doc.id}
-                    onClick={() => setSelectedImage(doc.url)}
-                    className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500 transition-all group shadow-sm text-left w-full"
-                  >
-                    {Content}
-                  </button>
-                );
-              }
+              const handleClick = () => {
+                if (isImage) {
+                  setSelectedImage(doc.url);
+                } else {
+                  window.open(doc.url, '_blank', 'noreferrer');
+                }
+              };
 
               return (
-                <a 
+                <div 
                   key={doc.id}
-                  href={doc.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500 transition-all group shadow-sm flex flex-col gap-3"
+                  onClick={handleClick}
+                  className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500 transition-all group shadow-sm text-left w-full cursor-pointer flex flex-col gap-3"
                 >
                   {Content}
-                </a>
+                </div>
               );
             })}
             {project.documents.length === 0 && (
@@ -940,7 +908,65 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
           </div>
         </Modal>
       )}
-      {selectedImage && (
+      {editingDoc && (
+      <Modal isOpen={true} onClose={() => setEditingDoc(null)} title="Editar Documento">
+        <div className="p-6 space-y-6">
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Nombre del Documento</label>
+              <input 
+                type="text"
+                className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                value={editingDoc.name}
+                onChange={e => setEditingDoc({ ...editingDoc, name: e.target.value })}
+                placeholder="Ej: Plano de Instalación"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Tipo</label>
+              <select 
+                className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                value={editingDoc.type}
+                onChange={e => setEditingDoc({ ...editingDoc, type: e.target.value as any })}
+              >
+                <option value="file">Archivo</option>
+                <option value="image">Imagen</option>
+                <option value="link">Enlace / Link</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">URL / Ruta</label>
+              <input 
+                type="text"
+                className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                value={editingDoc.url}
+                onChange={e => setEditingDoc({ ...editingDoc, url: e.target.value })}
+                placeholder="https://..."
+              />
+              <p className="text-[10px] text-gray-400">Nota: Al cambiar la URL de un archivo local, este podría dejar de ser accesible si la ruta no es correcta.</p>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button 
+              onClick={() => setEditingDoc(null)}
+              className="flex-1 px-4 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={handleUpdateDoc}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all active:scale-95"
+            >
+              Guardar Cambios
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )}
+    {selectedImage && (
         <div 
           className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-300"
           onClick={() => setSelectedImage(null)}
