@@ -347,6 +347,8 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [notes, setNotes] = useState(project.notes || "");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [editingDoc, setEditingDoc] = useState<string | null>(null);
+  const [newDocName, setNewDocName] = useState("");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -378,6 +380,27 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
     onUploadDocs(fileInputRef.current?.files || null, newLinks);
     setShowUpload(false);
     setNewLinks([]);
+  };
+
+  const handleDeleteDoc = (docId: string) => {
+    if (confirm("¿Estás seguro de que deseas eliminar este documento?")) {
+      const updatedDocs = project.documents.filter(d => d.id !== docId);
+      onUpdateProject({ documents: updatedDocs });
+    }
+  };
+
+  const startEditingDoc = (doc: ProjectDoc) => {
+    setEditingDoc(doc.id);
+    setNewDocName(doc.name);
+  };
+
+  const handleRenameDoc = () => {
+    if (!newDocName.trim()) return;
+    const updatedDocs = project.documents.map(d => 
+      d.id === editingDoc ? { ...d, name: newDocName } : d
+    );
+    onUpdateProject({ documents: updatedDocs });
+    setEditingDoc(null);
   };
 
   const handleExportProject = async () => {
@@ -735,10 +758,48 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
                       {isImage ? <ImageIcon size={20} /> : doc.type === 'link' ? <LinkIcon size={20} /> : <FileText size={20} />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-900 dark:text-gray-100 text-sm truncate">{doc.name}</p>
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{doc.date}</p>
+                      {editingDoc === doc.id ? (
+                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                          <input 
+                            type="text"
+                            value={newDocName}
+                            onChange={e => setNewDocName(e.target.value)}
+                            className="w-full p-1 text-sm rounded border border-blue-300 dark:border-blue-500 bg-white dark:bg-gray-800"
+                            autoFocus
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') handleRenameDoc();
+                              if (e.key === 'Escape') setEditingDoc(null);
+                            }}
+                          />
+                          <button 
+                            onClick={handleRenameDoc}
+                            className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                          >
+                            <CheckCircle2 size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="font-bold text-gray-900 dark:text-gray-100 text-sm truncate">{doc.name}</p>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{doc.date}</p>
+                        </>
+                      )}
                     </div>
-                    <ExternalLink size={14} className="text-gray-300 group-hover:text-blue-500 transition-colors shrink-0" />
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                      <button 
+                        onClick={() => startEditingDoc(doc)}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteDoc(doc.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                      <ExternalLink size={14} className="mt-1.5 ml-1 text-gray-300 group-hover:text-blue-500 transition-colors shrink-0" />
+                    </div>
                   </div>
                 </div>
               );
