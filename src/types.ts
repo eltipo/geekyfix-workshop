@@ -141,3 +141,14 @@ export interface ServiceType {
   defaultPrice: number;
   category?: string;
 }
+
+export interface Transaction {
+  id: string;
+  type: 'income' | 'expense';
+  amount: number;
+  date: string;
+  description: string;
+  category: 'general' | 'project' | 'budget' | 'task';
+  referenceId?: string; 
+  createdAt?: string;
+}

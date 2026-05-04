@@ -49,9 +49,15 @@ async function initDb() {
     if (!db.projects) {
       db.projects = [];
     }
+    if (!db.settings) {
+      db.settings = {};
+    }
+    if (!db.transactions) {
+      db.transactions = [];
+    }
     await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2));
   } catch {
-    await fs.writeFile(DB_FILE, JSON.stringify({ clients: [], devices: [], tools: [], budgets: [], serviceTypes: [], serviceTasks: [], projects: [] }));
+    await fs.writeFile(DB_FILE, JSON.stringify({ clients: [], devices: [], tools: [], budgets: [], serviceTypes: [], serviceTasks: [], projects: [], settings: {}, transactions: [] }));
   }
 }
 // upload middleware
@@ -118,6 +124,55 @@ async function writeDb(data: any) {
 }
 
 // API Routes
+app.post("/api/login", async (req, res) => {
+  const { password } = req.body;
+  const db = await readDb();
+  const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "geekyfix123";
+  
+  if (password === currentPassword) {
+    res.json({ success: true, token: currentPassword });
+  } else {
+    res.status(401).json({ error: "Contraseña incorrecta" });
+  }
+});
+
+app.use("/api", async (req, res, next) => {
+  if (req.path === "/login" || req.path === "/health" || req.path === "/debug") {
+    return next();
+  }
+  
+  const authHeader = req.headers.authorization;
+  const tokenQuery = req.query.token;
+  
+  const token = (authHeader && authHeader.split(" ")[1]) || tokenQuery;
+  
+  const db = await readDb();
+  const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "geekyfix123";
+  
+  if (!token || token !== currentPassword) {
+    return res.status(401).json({ error: "No autorizado" });
+  }
+  next();
+});
+
+app.post("/api/settings/password", async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const db = await readDb();
+  const storedPassword = db.settings?.password || process.env.APP_PASSWORD || "geekyfix123";
+  
+  if (currentPassword !== storedPassword) {
+    return res.status(401).json({ error: "La contraseña actual es incorrecta" });
+  }
+  
+  if (!db.settings) {
+    db.settings = {};
+  }
+  db.settings.password = newPassword;
+  await writeDb(db);
+  
+  res.json({ success: true, token: newPassword });
+});
+
 app.get("/api/debug", (req, res) => {
   const routes: string[] = [];
   // @ts-ignore
@@ -736,6 +791,41 @@ app.post("/api/projects/:id/documents", upload.array("files"), async (req, res, 
   } catch (error) {
     next(error);
   }
+});
+
+app.get("/api/transactions", async (req, res) => {
+  const db = await readDb();
+  res.json(db.transactions || []);
+});
+
+app.post("/api/transactions", async (req, res) => {
+  const db = await readDb();
+  const tx = { ...req.body, id: uuidv4() };
+  if (!db.transactions) db.transactions = [];
+  db.transactions.push(tx);
+  await writeDb(db);
+  res.json(tx);
+});
+
+app.put("/api/transactions/:id", async (req, res) => {
+  const db = await readDb();
+  if (!db.transactions) db.transactions = [];
+  const idx = db.transactions.findIndex((t: any) => t.id === req.params.id);
+  if (idx !== -1) {
+    db.transactions[idx] = { ...db.transactions[idx], ...req.body };
+    await writeDb(db);
+    res.json(db.transactions[idx]);
+  } else {
+    res.status(404).json({ error: "Transaction not found" });
+  }
+});
+
+app.delete("/api/transactions/:id", async (req, res) => {
+  const db = await readDb();
+  if (!db.transactions) db.transactions = [];
+  db.transactions = db.transactions.filter((t: any) => t.id !== req.params.id);
+  await writeDb(db);
+  res.json({ success: true });
 });
 
 // Backup & Restore API

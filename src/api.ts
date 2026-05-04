@@ -1,5 +1,22 @@
 import { Client, Device, Tool, Budget, ServiceType, ServiceTask, Project } from "./types";
 
+const originalFetch = window.fetch.bind(window);
+const localFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const token = localStorage.getItem("app_token");
+  const headers = new Headers(init?.headers);
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const response = await originalFetch(input, { ...init, headers });
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("unauthorized"));
+  }
+  return response;
+};
+
+// Aliasing for ease of not renaming everything
+const fetch = localFetch;
+
 export const api = {
   getClients: async (): Promise<Client[]> => {
     const res = await fetch("/api/clients");
@@ -233,8 +250,46 @@ export const api = {
       method: "DELETE",
     });
   },
+  getTransactions: async (): Promise<any[]> => {
+    const res = await fetch("/api/transactions");
+    return res.json();
+  },
+  createTransaction: async (tx: any): Promise<any> => {
+    const res = await fetch("/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(tx),
+    });
+    return res.json();
+  },
+  updateTransaction: async (id: string, tx: any): Promise<any> => {
+    const res = await fetch(`/api/transactions/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(tx),
+    });
+    return res.json();
+  },
+  deleteTransaction: async (id: string): Promise<void> => {
+    await fetch(`/api/transactions/${id}`, {
+      method: "DELETE",
+    });
+  },
+  changePassword: async (currentPassword: string, newPassword: string): Promise<{ success: boolean; token?: string }> => {
+    const res = await fetch("/api/settings/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Error al cambiar contraseña");
+    }
+    return data;
+  },
   backupData: async (): Promise<void> => {
-    window.location.href = "/api/backup";
+    const token = localStorage.getItem("app_token");
+    window.location.href = `/api/backup${token ? `?token=${token}` : ''}`;
   },
   restoreData: async (file: File): Promise<{ success: boolean; message: string }> => {
     const formData = new FormData();

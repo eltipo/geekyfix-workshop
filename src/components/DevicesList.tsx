@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { Device, Client, Ticket } from "../types";
-import { Smartphone, Calendar, AlertCircle, FileText, Upload, Camera, X, Edit2, Trash2, ClipboardPlus, CheckCircle2, Plus, Cpu, MessageCircle, ArrowLeft, ChevronRight, ChevronLeft, Clock, Check, ReceiptText, Filter, Search, ChevronDown } from "lucide-react";
+import { Smartphone, Calendar, AlertCircle, FileText, Upload, Camera, X, Edit2, Trash2, ClipboardPlus, CheckCircle2, Plus, Cpu, MessageCircle, ArrowLeft, ChevronRight, ChevronLeft, Clock, Check, ReceiptText, Filter, Search, ChevronDown, GripVertical } from "lucide-react";
 import { Modal } from "./Modal";
+import { Reorder } from "motion/react";
 
 export type DeviceFilterStatus = 'all' | 'pending' | 'completed' | 'no-tickets';
 
@@ -951,14 +952,11 @@ function DeviceForm({
   const [deviceType, setDeviceType] = useState(initialData?.deviceType || "Celular");
   const [deviceTypeOther, setDeviceTypeOther] = useState(initialData?.deviceTypeOther || "");
   const [hardware, setHardware] = useState(initialData?.hardware || "");
-  const [hardwareDetails, setHardwareDetails] = useState<{key: string, value: string}[]>(
+  const [hardwareDetails, setHardwareDetails] = useState<{key: string, value: string, id: string}[]>(
     initialData?.hardwareDetails && initialData.hardwareDetails.length > 0 
-      ? initialData.hardwareDetails 
+      ? initialData.hardwareDetails.map(h => ({ ...h, id: Math.random().toString(36).substr(2, 9) }))
       : [
-          { key: "CPU", value: "" },
-          { key: "RAM", value: "" },
-          { key: "Disco", value: "" },
-          { key: "Capacidad", value: "" }
+          { id: Math.random().toString(36).substr(2, 9), key: "", value: "" }
         ]
   );
   const [problem, setProblem] = useState(initialData?.problem || "");
@@ -996,11 +994,15 @@ function DeviceForm({
   };
 
   const addHardwareRow = () => {
-    setHardwareDetails([...hardwareDetails, { key: "", value: "" }]);
+    setHardwareDetails([...hardwareDetails, { id: Math.random().toString(36).substr(2, 9), key: "", value: "" }]);
   };
 
   const removeHardwareRow = (index: number) => {
     setHardwareDetails(hardwareDetails.filter((_, i) => i !== index));
+  };
+
+  const moveHardwareRow = (newOrder: {key: string, value: string, id: string}[]) => {
+    setHardwareDetails(newOrder);
   };
 
   const handleMsinfoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1117,7 +1119,9 @@ function DeviceForm({
     }
     formData.append("hardware", hardware);
     
-    const validHardwareDetails = hardwareDetails.filter(h => h.key.trim() !== "" || h.value.trim() !== "");
+    const validHardwareDetails = hardwareDetails
+      .filter(h => h.key.trim() !== "" || h.value.trim() !== "")
+      .map(({ id, ...rest }) => rest);
     formData.append("hardwareDetails", JSON.stringify(validHardwareDetails));
     
     formData.append("problem", problem);
@@ -1242,33 +1246,37 @@ function DeviceForm({
           </button>
         </div>
         
-        <div className="space-y-2">
+        <Reorder.Group axis="y" values={hardwareDetails} onReorder={moveHardwareRow} className="space-y-2">
           {hardwareDetails.map((item, index) => (
-            <div key={index} className="flex gap-2 items-center">
+            <Reorder.Item key={item.id} value={item} className="flex gap-2 items-center bg-white dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+              <div className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600 transition-colors">
+                <GripVertical size={16} />
+              </div>
               <input
                 type="text"
                 placeholder="Componente (ej. CPU)"
-                className="w-1/3 p-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                className="w-1/3 p-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
                 value={item.key}
                 onChange={(e) => handleHardwareChange(index, 'key', e.target.value)}
               />
               <input
                 type="text"
                 placeholder="Detalle (ej. Intel i5)"
-                className="flex-1 p-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                className="flex-1 p-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
                 value={item.value}
                 onChange={(e) => handleHardwareChange(index, 'value', e.target.value)}
               />
               <button 
                 type="button" 
                 onClick={() => removeHardwareRow(index)}
-                className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                title="Eliminar fila"
               >
                 <X size={16} />
               </button>
-            </div>
+            </Reorder.Item>
           ))}
-        </div>
+        </Reorder.Group>
         
         {/* Legacy hardware field for backward compatibility, only show if it has content and no details exist */}
         {hardware && hardwareDetails.length === 0 && (
@@ -1570,8 +1578,8 @@ function TicketFormModal({
   const [description, setDescription] = useState(initialData?.description || "");
   const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
   const [resolution, setResolution] = useState(initialData?.resolution || "");
-  const [resolutionItems, setResolutionItems] = useState<{ task: string; amount: number }[]>(
-    initialData?.resolutionItems || []
+  const [resolutionItems, setResolutionItems] = useState<{ id: string; task: string; amount: number }[]>(
+    (initialData?.resolutionItems || []).map(item => ({ ...item, id: Math.random().toString(36).substr(2, 9) }))
   );
   const [isCompleted, setIsCompleted] = useState(initialData?.isCompleted || false);
   const [existingPhotos, setExistingPhotos] = useState<string[]>(initialData?.photos || []);
@@ -1593,8 +1601,9 @@ function TicketFormModal({
     setExistingPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const addResolutionItem = () => setResolutionItems([...resolutionItems, { task: "", amount: 0 }]);
+  const addResolutionItem = () => setResolutionItems([...resolutionItems, { id: Math.random().toString(36).substr(2, 9), task: "", amount: 0 }]);
   const removeResolutionItem = (index: number) => setResolutionItems(resolutionItems.filter((_, i) => i !== index));
+  const moveResolutionItem = (newOrder: { id: string; task: string; amount: number }[]) => setResolutionItems(newOrder);
   const updateResolutionItem = (index: number, field: "task" | "amount", value: any) => {
     const newItems = [...resolutionItems];
     if (field === "amount") {
@@ -1614,7 +1623,8 @@ function TicketFormModal({
     formData.append("description", description);
     formData.append("date", date);
     formData.append("resolution", resolution);
-    formData.append("resolutionItems", JSON.stringify(resolutionItems));
+    const validResolutionItems = resolutionItems.map(({ id, ...rest }) => rest);
+    formData.append("resolutionItems", JSON.stringify(validResolutionItems));
     formData.append("isCompleted", isCompleted.toString());
     formData.append("existingPhotos", JSON.stringify(existingPhotos));
     photos.forEach(p => formData.append("photos", p));
@@ -1674,13 +1684,16 @@ function TicketFormModal({
             </button>
           </div>
           
-          <div className="space-y-2 mb-3">
+          <Reorder.Group axis="y" values={resolutionItems} onReorder={moveResolutionItem} className="space-y-2 mb-3">
             {resolutionItems.map((item, idx) => (
-              <div key={idx} className="flex gap-2 items-center bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+              <Reorder.Item key={item.id} value={item} className="flex gap-2 items-center bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600 transition-colors">
+                  <GripVertical size={16} />
+                </div>
                 <input
                   type="text"
                   placeholder="Tarea realizada..."
-                  className="flex-1 p-1.5 text-xs rounded border border-gray-300 dark:border-gray-600"
+                  className="flex-1 p-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                   value={item.task}
                   onChange={(e) => updateResolutionItem(idx, "task", e.target.value)}
                 />
@@ -1689,7 +1702,7 @@ function TicketFormModal({
                   <input
                     type="number"
                     placeholder="0"
-                    className="w-full p-1.5 pl-5 text-xs rounded border border-gray-300 dark:border-gray-600"
+                    className="w-full p-1.5 pl-5 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                     value={item.amount || ""}
                     onChange={(e) => updateResolutionItem(idx, "amount", e.target.value)}
                   />
@@ -1701,9 +1714,9 @@ function TicketFormModal({
                 >
                   <Trash2 size={14} />
                 </button>
-              </div>
+              </Reorder.Item>
             ))}
-          </div>
+          </Reorder.Group>
 
           {resolutionItems.length > 0 && (
             <div className="flex justify-end mb-3 px-2">

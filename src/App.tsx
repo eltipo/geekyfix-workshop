@@ -10,13 +10,16 @@ import { Settings } from "./components/Settings";
 import { CalendarView } from "./components/CalendarView";
 import { ServiceTasksList } from "./components/ServiceTasksList";
 import { ProjectsList } from "./components/ProjectsList";
-import { Calendar as CalendarIcon, ClipboardList, Folder } from "lucide-react";
+import { Calendar as CalendarIcon, ClipboardList, Folder, LogOut, Wallet } from "lucide-react";
+import { FinanceList } from "./components/FinanceList";
+import { Login } from "./components/Login";
 
 export default function App() {
+  const [token, setToken] = useState<string | null>(localStorage.getItem("app_token"));
   const [appMode, setAppMode] = useState<"workshop" | "project">(() => {
     return (localStorage.getItem('appMode') as "workshop" | "project") || "workshop";
   });
-  const [currentTab, setCurrentTab] = useState<"home" | "clients" | "devices" | "report" | "tools" | "budgets" | "settings" | "calendar" | "tasks" | "projects">("home");
+  const [currentTab, setCurrentTab] = useState<"home" | "clients" | "devices" | "report" | "tools" | "budgets" | "settings" | "calendar" | "tasks" | "projects" | "finance">("home");
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>();
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
@@ -37,6 +40,15 @@ export default function App() {
 
   const [showFooter, setShowFooter] = useState(!isMobile);
 
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      localStorage.removeItem("app_token");
+      setToken(null);
+    };
+    window.addEventListener('unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('unauthorized', handleUnauthorized);
+  }, []);
+
   // Synchronize state with URL hash for better browser history behavior (fixes mobile back button)
   useEffect(() => {
     const handlePopState = () => {
@@ -54,7 +66,7 @@ export default function App() {
         const tab = parts[0] as any;
         const id = parts[1];
 
-        const validTabs = ["home", "clients", "devices", "report", "tools", "budgets", "settings", "calendar", "tasks", "projects"];
+        const validTabs = ["home", "clients", "devices", "report", "tools", "budgets", "settings", "calendar", "tasks", "projects", "finance"];
         if (validTabs.includes(tab)) {
           newTab = tab;
           if (tab === "clients") {
@@ -150,6 +162,10 @@ export default function App() {
     setSelectedClientId(id);
     setCurrentTab(appMode === 'project' ? "projects" : "devices");
   };
+
+  if (!token) {
+    return <Login onLogin={setToken} />;
+  }
 
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col font-sans transition-colors duration-200 text-sm sm:text-base overflow-hidden">
@@ -285,6 +301,12 @@ export default function App() {
                 onClick={() => { setCurrentTab("budgets"); setIsDrawerOpen(false); }} 
               />
               <DrawerItem 
+                icon={<Wallet size={24} />} 
+                label="Finanzas" 
+                active={currentTab === "finance"} 
+                onClick={() => { setCurrentTab("finance"); setIsDrawerOpen(false); }} 
+              />
+              <DrawerItem 
                 icon={<CalendarIcon size={24} />} 
                 label="Calendario" 
                 active={currentTab === "calendar"} 
@@ -295,6 +317,16 @@ export default function App() {
                 label="Configuración" 
                 active={currentTab === "settings"} 
                 onClick={() => { setCurrentTab("settings"); setIsDrawerOpen(false); }} 
+              />
+              <DrawerItem 
+                icon={<LogOut size={24} />} 
+                label="Cerrar Sesión" 
+                active={false} 
+                onClick={() => { 
+                  localStorage.removeItem("app_token"); 
+                  setToken(null); 
+                  setIsDrawerOpen(false); 
+                }} 
               />
             </div>
           </div>
@@ -358,6 +390,7 @@ export default function App() {
           )}
           {currentTab === "report" && <DailyReport />}
           {currentTab === "tools" && <ToolsList />}
+          {currentTab === "finance" && <FinanceList appMode={appMode} />}
           {currentTab === "budgets" && <BudgetsList appMode={appMode} initialDeviceId={selectedDeviceId} initialBudgetId={selectedBudgetId} />}
           {currentTab === "settings" && <Settings />}
           {currentTab === "calendar" && (
@@ -490,6 +523,14 @@ export default function App() {
             <span className="text-[8px] mt-0.5 font-medium truncate text-center">Calend.</span>
           </button>
           
+          <button
+            onClick={() => setCurrentTab("finance")}
+            className={`flex flex-col items-center justify-center p-2 min-w-[64px] ${currentTab === "finance" ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`}
+          >
+            <Wallet size={18} />
+            <span className="text-[8px] mt-0.5 font-medium truncate text-center">Finanzas</span>
+          </button>
+
           <button
             onClick={() => setCurrentTab("settings")}
             className={`flex flex-col items-center justify-center p-2 min-w-[64px] ${currentTab === "settings" ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`}

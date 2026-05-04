@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { ServiceType } from "../types";
-import { Download, Upload, ShieldCheck, AlertTriangle, RefreshCw, Database, HardDrive, History, Plus, Trash2, Edit2, Save, X, Briefcase, Info, ExternalLink, ChevronRight } from "lucide-react";
+import { Download, Upload, ShieldCheck, AlertTriangle, RefreshCw, Database, HardDrive, History, Plus, Trash2, Edit2, Save, X, Briefcase, Info, ExternalLink, ChevronRight, Lock } from "lucide-react";
 import { Modal } from "./Modal";
 
 export function Settings() {
@@ -12,6 +12,11 @@ export function Settings() {
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [newService, setNewService] = useState({ name: "", defaultPrice: 0 });
   const [showAboutModal, setShowAboutModal] = useState(false);
+  
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: "", newPass: "", confirm: "" });
+  const [passwordMsg, setPasswordMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
+  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
 
   const APP_VERSION = "v1.5.0";
   const CHANGELOG = [
@@ -89,6 +94,37 @@ export function Settings() {
     } finally {
       setIsRestoring(false);
       setPendingFile(null);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordMsg(null);
+    if (passwordForm.newPass !== passwordForm.confirm) {
+      setPasswordMsg({ type: 'error', text: "Las nuevas contraseñas no coinciden" });
+      return;
+    }
+    if (passwordForm.newPass.length < 6) {
+      setPasswordMsg({ type: 'error', text: "La contraseña debe tener al menos 6 caracteres" });
+      return;
+    }
+    
+    setIsSubmittingPassword(true);
+    try {
+      const res = await api.changePassword(passwordForm.current, passwordForm.newPass);
+      if (res.success) {
+        if (res.token) localStorage.setItem("app_token", res.token);
+        setPasswordMsg({ type: 'success', text: "Contraseña actualizada exitosamente" });
+        setTimeout(() => {
+          setIsChangingPassword(false);
+          setPasswordForm({ current: "", newPass: "", confirm: "" });
+          setPasswordMsg(null);
+        }, 2000);
+      }
+    } catch (err: any) {
+      setPasswordMsg({ type: 'error', text: err.message || "Error al cambiar la contraseña" });
+    } finally {
+      setIsSubmittingPassword(false);
     }
   };
 
@@ -229,6 +265,24 @@ export function Settings() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col sm:flex-row justify-between items-center">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl shrink-0">
+            <Lock size={24} />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Contraseña de Acceso</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Modifica la clave principal de acceso a la aplicación</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => setIsChangingPassword(true)} 
+          className="mt-4 sm:mt-0 w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 font-bold rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+        >
+          Cambiar Clave
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -411,6 +465,82 @@ export function Settings() {
           <span className="text-[10px] font-bold uppercase">History</span>
         </div>
       </div>
+
+      {isChangingPassword && (
+        <Modal 
+          isOpen={true} 
+          onClose={() => {
+            setIsChangingPassword(false);
+            setPasswordForm({ current: "", newPass: "", confirm: "" });
+            setPasswordMsg(null);
+          }} 
+          title="Cambiar Contraseña"
+        >
+          <form onSubmit={handleChangePassword} className="p-6 space-y-4">
+            {passwordMsg && (
+              <div className={`p-4 rounded-xl flex items-center gap-3 border text-sm ${
+                passwordMsg.type === 'success' 
+                  ? 'bg-green-50 border-green-100 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400' 
+                  : 'bg-red-50 border-red-100 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'
+              }`}>
+                {passwordMsg.type === 'success' ? <ShieldCheck size={18} className="shrink-0" /> : <AlertTriangle size={18} className="shrink-0" />}
+                <p>{passwordMsg.text}</p>
+              </div>
+            )}
+            
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Contraseña Actual</label>
+              <input 
+                type="password" 
+                required
+                className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                value={passwordForm.current}
+                onChange={e => setPasswordForm({...passwordForm, current: e.target.value})}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Nueva Contraseña</label>
+              <input 
+                type="password" 
+                required
+                className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                value={passwordForm.newPass}
+                onChange={e => setPasswordForm({...passwordForm, newPass: e.target.value})}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Confirmar Nueva Contraseña</label>
+              <input 
+                type="password" 
+                required
+                className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                value={passwordForm.confirm}
+                onChange={e => setPasswordForm({...passwordForm, confirm: e.target.value})}
+              />
+            </div>
+            
+            <div className="flex gap-3 pt-2">
+              <button 
+                type="button" 
+                onClick={() => setIsChangingPassword(false)}
+                className="flex-1 px-4 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                disabled={isSubmittingPassword}
+              >
+                Cancelar
+              </button>
+              <button 
+                type="submit"
+                disabled={isSubmittingPassword}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-colors disabled:opacity-70"
+              >
+                {isSubmittingPassword ? "Guardando..." : "Guardar Clave"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
