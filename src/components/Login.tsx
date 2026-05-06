@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Lock, LogIn, AlertCircle } from "lucide-react";
+import { Lock, LogIn, AlertCircle, Fingerprint } from "lucide-react";
 import { api } from "../api";
+import { startAuthentication } from "@simplewebauthn/browser";
 
 export function Login({ onLogin }: { onLogin: (token: string) => void }) {
   const [password, setPassword] = useState("");
@@ -28,6 +29,31 @@ export function Login({ onLogin }: { onLogin: (token: string) => void }) {
       }
     } catch (err) {
       setError("Error de conexión al servidor");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBiometricAuth = async () => {
+    try {
+      setError("");
+      setLoading(true);
+      const options = await api.getWebauthnAuthOptions();
+      const authResp = await startAuthentication(options);
+      const verificationResp = await api.verifyWebauthnAuth(authResp);
+      
+      if (verificationResp.verified && verificationResp.token) {
+        localStorage.setItem("app_token", verificationResp.token);
+        onLogin(verificationResp.token);
+      } else {
+        setError("Autenticación biométrica falló");
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes("publickey-credentials-get")) {
+        setError("La biometría requiere abrir la app en una nueva pestaña (haz clic en el ícono de la esquina superior derecha).");
+      } else {
+        setError(err.message || "Error al iniciar con biometría. ¿Está configurado el dispositivo?");
+      }
     } finally {
       setLoading(false);
     }
@@ -77,6 +103,23 @@ export function Login({ onLogin }: { onLogin: (token: string) => void }) {
                 Acceder <LogIn size={18} />
               </>
             )}
+          </button>
+
+          <div className="relative flex items-center justify-center py-2">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200"></div>
+            </div>
+            <div className="relative bg-white px-4 text-sm text-gray-500">O</div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleBiometricAuth}
+            disabled={loading}
+            className="w-full bg-gray-50 hover:bg-gray-100 text-gray-800 font-bold py-3 px-4 rounded-xl border border-gray-200 flex items-center justify-center gap-3 transition-colors active:scale-95 shadow-sm"
+          >
+            <Fingerprint size={20} className="text-blue-600" />
+            Ingresar con Biometría (Face ID / Huella)
           </button>
         </form>
       </div>

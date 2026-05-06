@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { ServiceType } from "../types";
-import { Download, Upload, ShieldCheck, AlertTriangle, RefreshCw, Database, HardDrive, History, Plus, Trash2, Edit2, Save, X, Briefcase, Info, ExternalLink, ChevronRight, Lock } from "lucide-react";
+import { Download, Upload, ShieldCheck, AlertTriangle, RefreshCw, Database, HardDrive, History, Plus, Trash2, Edit2, Save, X, Briefcase, Info, ExternalLink, ChevronRight, Lock, Fingerprint } from "lucide-react";
 import { Modal } from "./Modal";
+import { startRegistration } from "@simplewebauthn/browser";
 
 export function Settings() {
   const [isRestoring, setIsRestoring] = useState(false);
@@ -125,6 +126,23 @@ export function Settings() {
       setPasswordMsg({ type: 'error', text: err.message || "Error al cambiar la contraseña" });
     } finally {
       setIsSubmittingPassword(false);
+    }
+  };
+
+  const handleRegisterBiometrics = async () => {
+    try {
+      setMessage({ type: 'success', text: "Iniciando configuración de biometría..." });
+      const options = await api.getWebauthnRegisterOptions();
+      const resp = await startRegistration(options);
+      await api.verifyWebauthnRegister(resp);
+      setMessage({ type: 'success', text: "¡Dispositivo registrado exitosamente para inicio de sesión biométrico!" });
+    } catch (error: any) {
+      console.error(error);
+      if (error.message && error.message.includes("publickey-credentials-create")) {
+        setMessage({ type: 'error', text: "Para configurar la biometría, abre la app en una nueva pestaña (ícono superior derecho)." });
+      } else {
+        setMessage({ type: 'error', text: "No se pudo registrar: " + (error.message || "Error desconocido") });
+      }
     }
   };
 
@@ -282,6 +300,25 @@ export function Settings() {
           className="mt-4 sm:mt-0 w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 font-bold rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
         >
           Cambiar Clave
+        </button>
+      </div>
+
+      {/* Biometry Card */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col sm:flex-row justify-between items-center">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl shrink-0">
+            <Fingerprint size={24} />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Acceso Biométrico (Passkeys)</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Registra este dispositivo para iniciar sesión con huella o Face ID</p>
+          </div>
+        </div>
+        <button 
+          onClick={handleRegisterBiometrics} 
+          className="mt-4 sm:mt-0 w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 font-bold rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+        >
+          Configurar Biometría
         </button>
       </div>
 

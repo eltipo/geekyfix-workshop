@@ -10,6 +10,8 @@ const localFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   const response = await originalFetch(input, { ...init, headers });
   if (response.status === 401) {
     window.dispatchEvent(new Event("unauthorized"));
+    // Return a promise that never resolves so the caller doesn't throw errors while the app redirects to login
+    return new Promise(() => {});
   }
   return response;
 };
@@ -46,6 +48,35 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(client),
     });
+    return res.json();
+  },
+  // WebAuthn
+  getWebauthnRegisterOptions: async () => {
+    const res = await fetch("/api/webauthn/register-options");
+    if(!res.ok) throw new Error("Error getting register options");
+    return res.json();
+  },
+  verifyWebauthnRegister: async (body: any) => {
+    const res = await fetch("/api/webauthn/register-verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if(!res.ok) throw new Error("Error verifing register");
+    return res.json();
+  },
+  getWebauthnAuthOptions: async () => {
+    const res = await fetch("/api/webauthn/auth-options");
+    if(!res.ok) throw new Error("Error getting auth options");
+    return res.json();
+  },
+  verifyWebauthnAuth: async (body: any) => {
+    const res = await fetch("/api/webauthn/auth-verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if(!res.ok) throw new Error("Error verifing auth");
     return res.json();
   },
   deleteClient: async (id: string): Promise<void> => {

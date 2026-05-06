@@ -7,6 +7,18 @@ import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import archiver from "archiver";
 import unzipper from "unzipper";
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from "@simplewebauthn/server";
+
+const webauthnChallenges: Record<string, string> = {}; // { userId: challenge }
+const webauthnUser = {
+  id: "admin-user", // Since we only have one user role (admin)
+  username: "admin",
+};
 
 const app = express();
 const PORT = 3000;
@@ -55,9 +67,12 @@ async function initDb() {
     if (!db.transactions) {
       db.transactions = [];
     }
+    if (!db.passkeys) {
+      db.passkeys = [];
+    }
     await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2));
   } catch {
-    await fs.writeFile(DB_FILE, JSON.stringify({ clients: [], devices: [], tools: [], budgets: [], serviceTypes: [], serviceTasks: [], projects: [], settings: {}, transactions: [] }));
+    await fs.writeFile(DB_FILE, JSON.stringify({ clients: [], devices: [], tools: [], budgets: [], serviceTypes: [], serviceTasks: [], projects: [], settings: {}, transactions: [], passkeys: [] }));
   }
 }
 // upload middleware
@@ -137,7 +152,7 @@ app.post("/api/login", async (req, res) => {
 });
 
 app.use("/api", async (req, res, next) => {
-  if (req.path === "/login" || req.path === "/health" || req.path === "/debug") {
+  if (req.path === "/login" || req.path === "/health" || req.path === "/debug" || req.path === "/webauthn/auth-options" || req.path === "/webauthn/auth-verify") {
     return next();
   }
   
@@ -151,7 +166,6 @@ app.use("/api", async (req, res, next) => {
     const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "geekyfix123";
     
     if (!token || token !== currentPassword) {
-      console.log(`[AUTH FAILED] Path: ${req.path}, Token received: ${token}, Expected: ${currentPassword}`);
       return res.status(401).json({ error: "No autorizado" });
     }
     next();
@@ -204,6 +218,119 @@ app.get("/api/debug", (req, res) => {
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+app.get("/api/webauthn/register-options", async (req, res) => {
+  const rpName = "GeekyFix";
+  const rpID = req.headers.origin ? new URL(req.headers.origin).hostname : req.hostname;
+  
+  const options = await generateRegistrationOptions({
+    rpName,
+    rpID,
+    userID: new Uint8Array(Buffer.from(webauthnUser.id)),
+    userName: webauthnUser.username,
+    attestationType: "none",
+    authenticatorSelection: {
+      residentKey: "preferred",
+      userVerification: "preferred",
+    },
+  });
+  webauthnChallenges[webauthnUser.id] = options.challenge;
+  res.json(options);
+});
+
+app.post("/api/webauthn/register-verify", async (req, res) => {
+  const rpID = req.headers.origin ? new URL(req.headers.origin).hostname : req.hostname;
+  const expectedChallenge = webauthnChallenges[webauthnUser.id];
+  const expectedOrigin = req.headers.origin || `https://${req.hostname}`;
+  
+  if (!expectedChallenge) return res.status(400).json({ error: "Missing challenge" });
+  
+  try {
+    const verification = await verifyRegistrationResponse({
+      response: req.body,
+      expectedChallenge,
+      expectedOrigin,
+      expectedRPID: rpID,
+    });
+    
+    if (verification.verified && verification.registrationInfo) {
+      const db = await readDb();
+      if (!db.passkeys) db.passkeys = [];
+      const { credential } = verification.registrationInfo;
+      const newPasskey = {
+        id: credential.id,
+        publicKey: Buffer.from(credential.publicKey).toString("base64url"),
+        counter: credential.counter,
+        transports: credential.transports || [],
+      };
+      
+      db.passkeys.push(newPasskey);
+      await writeDb(db);
+      
+      res.json({ verified: true });
+    } else {
+      res.status(400).json({ error: "No verificado" });
+    }
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/webauthn/auth-options", async (req, res) => {
+  const rpID = req.headers.origin ? new URL(req.headers.origin).hostname : req.hostname;
+  const db = await readDb();
+  
+  const options = await generateAuthenticationOptions({
+    rpID,
+    userVerification: "preferred",
+  });
+  
+  webauthnChallenges["auth"] = options.challenge;
+  res.json(options);
+});
+
+app.post("/api/webauthn/auth-verify", async (req, res) => {
+  const rpID = req.headers.origin ? new URL(req.headers.origin).hostname : req.hostname;
+  const expectedChallenge = webauthnChallenges["auth"];
+  const expectedOrigin = req.headers.origin || `https://${req.hostname}`;
+  const db = await readDb();
+  
+  if (!expectedChallenge) return res.status(400).json({ error: "Missing challenge" });
+  
+  const reqIdBase64URL = req.body.id;
+  const passkey = (db.passkeys || []).find((pk: any) => pk.id === reqIdBase64URL);
+  
+  if (!passkey) return res.status(400).json({ error: "Credencial no encontrada" });
+  
+  try {
+    const verification = await verifyAuthenticationResponse({
+      response: req.body,
+      expectedChallenge,
+      expectedOrigin,
+      expectedRPID: rpID,
+      credential: {
+        id: passkey.id,
+        publicKey: new Uint8Array(Buffer.from(passkey.publicKey, "base64url")),
+        counter: passkey.counter,
+        transports: passkey.transports,
+      },
+      requireUserVerification: false,
+    });
+    
+    if (verification.verified) {
+      passkey.counter = verification.authenticationInfo.newCounter;
+      await writeDb(db);
+      
+      const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "geekyfix123";
+      res.json({ verified: true, token: currentPassword });
+    } else {
+      res.status(400).json({ error: "No verificado" });
+    }
+  } catch (err: any) {
+    console.error(err);
+    res.status(400).json({ error: err.message });
+  }
 });
 
 app.post("/api/parse-msinfo", upload.single("msinfo"), async (req, res) => {
