@@ -32,8 +32,11 @@ app.use("/data", express.static(DATA_DIR));
 
 // HTTPS Redirection middleware
 app.use((req, res, next) => {
-  if (process.env.NODE_ENV === "production" && req.headers["x-forwarded-proto"] === "http") {
-    return res.redirect(`https://${req.headers.host}${req.url}`);
+  const host = req.headers.host || "";
+  const isLocal = host.includes("localhost") || host.includes("127.0.0.1") || host.startsWith("192.168.") || host.startsWith("10.");
+  
+  if (process.env.NODE_ENV === "production" && req.headers["x-forwarded-proto"] === "http" && !isLocal) {
+    return res.redirect(`https://${host}${req.url}`);
   }
   next();
 });
