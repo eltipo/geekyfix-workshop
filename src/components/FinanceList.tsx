@@ -1,25 +1,46 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { api } from "../api";
-import { Transaction, Project, Budget, ServiceTask } from "../types";
-import { Coins, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Wallet, X, Filter } from "lucide-react";
+import { Transaction, Project, Budget, ServiceTask, Device, Receivable, Client } from "../types";
+import { Coins, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Wallet, X, Filter, Lock, Repeat, CreditCard, ChevronDown, ChevronUp, CheckCircle, Clock } from "lucide-react";
 import { Modal } from "./Modal";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
+  const [activeTab, setActiveTab] = useState<"cashflow" | "receivables" | "subscriptions">("cashflow");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [tasks, setTasks] = useState<ServiceTask[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+
+  // Modals
+  const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  const [isRecModalOpen, setIsRecModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [editingRec, setEditingRec] = useState<Receivable | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{ type: 'tx', tx: Transaction } | { type: 'rec', id: string } | null>(null);
+
+  // Filters for Cashflow
   const [filterType, setFilterType] = useState<"all" | "income" | "expense">("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
 
-  const [formData, setFormData] = useState<Partial<Transaction>>({
+  const [txFormData, setTxFormData] = useState<Partial<Transaction>>({
     type: "income",
     amount: 0,
     date: new Date().toISOString().split("T")[0],
     description: "",
     category: "general",
+  });
+
+  const [recFormData, setRecFormData] = useState<Partial<Receivable>>({
+    type: "one-time",
+    title: "",
+    totalAmount: 0,
+    paidAmount: 0,
+    startDate: new Date().toISOString().split("T")[0],
+    status: "pending",
   });
 
   useEffect(() => {
@@ -28,33 +49,86 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
 
   const fetchData = async () => {
     try {
-      const [txData, projData, budgData, taskData] = await Promise.all([
+      const [txData, recData, projData, budgData, taskData, deviceData, hiddenTxData, clientsData] = await Promise.all([
         api.getTransactions(),
+        api.getReceivables(),
         api.getProjects(),
         api.getBudgets(),
-        api.getServiceTasks()
+        api.getServiceTasks(),
+        api.getDevices(),
+        api.getHiddenTransactions(),
+        api.getClients()
       ]);
-      setTransactions(txData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      
+      const autoTransactions: Transaction[] = [];
+      
+      // Auto-incomes from completed Service Tasks
+      taskData.filter(t => t.isCompleted && t.amount > 0).forEach(t => {
+        const autoId = `auto-task-${t.id}`;
+        if (!hiddenTxData.includes(autoId)) {
+          autoTransactions.push({
+            id: autoId,
+            type: 'income',
+            amount: t.amount,
+            date: t.date,
+            description: `Cobro por tarea: ${t.description.substring(0, 30)}...`,
+            category: t.projectId ? 'project' : 'general', 
+            referenceId: t.projectId || t.id,
+            isAuto: true,
+            createdAt: t.date,
+          });
+        }
+      });
+
+      // Auto-incomes from completed Tickets in Devices
+      deviceData.forEach(d => {
+        if (d.tickets) {
+          d.tickets.filter(t => t.isCompleted).forEach(t => {
+            const amount = t.resolutionItems?.reduce((sum, ri) => sum + ri.amount, 0) || 0;
+            if (amount > 0) {
+              const autoId = `auto-ticket-${t.id}`;
+              if (!hiddenTxData.includes(autoId)) {
+                autoTransactions.push({
+                  id: autoId,
+                  type: 'income',
+                  amount: amount,
+                  date: t.date,
+                  description: `Cobro por ticket (Taller): ${t.description.substring(0, 30)}...`,
+                  category: 'workshop',
+                  referenceId: d.id,
+                  isAuto: true,
+                  createdAt: t.date,
+                });
+              }
+            }
+          });
+        }
+      });
+
+      setTransactions([...txData, ...autoTransactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      setReceivables(recData.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()));
       setProjects(projData);
       setBudgets(budgData);
       setTasks(taskData);
+      setDevices(deviceData);
+      setClients(clientsData);
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSaveTx = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       if (editingTx) {
-        await api.updateTransaction(editingTx.id, formData);
+        await api.updateTransaction(editingTx.id, txFormData);
       } else {
         await api.createTransaction({
-          ...formData,
+          ...txFormData,
           createdAt: new Date().toISOString(),
         });
       }
-      setIsModalOpen(false);
+      setIsTxModalOpen(false);
       setEditingTx(null);
       fetchData();
     } catch (e) {
@@ -62,15 +136,47 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm("¿Seguro que deseas eliminar este registro?")) {
-      await api.deleteTransaction(id);
+  const handleSaveRec = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingRec) {
+        await api.updateReceivable(editingRec.id, recFormData);
+      } else {
+        await api.createReceivable(recFormData);
+      }
+      setIsRecModalOpen(false);
+      setEditingRec(null);
       fetchData();
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  const openNewModal = () => {
-    setFormData({
+  const handleDeleteTx = (tx: Transaction) => {
+    setItemToDelete({ type: 'tx', tx });
+  };
+
+  const handleDeleteRec = (id: string) => {
+    setItemToDelete({ type: 'rec', id });
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+    if (itemToDelete.type === 'tx') {
+      if (itemToDelete.tx.isAuto) {
+        await api.hideAutoTransaction(itemToDelete.tx.id);
+      } else {
+        await api.deleteTransaction(itemToDelete.tx.id);
+      }
+    } else if (itemToDelete.type === 'rec') {
+      await api.deleteReceivable(itemToDelete.id);
+    }
+    setItemToDelete(null);
+    fetchData();
+  };
+
+  const openNewTxModal = () => {
+    setTxFormData({
       type: "income",
       amount: 0,
       date: new Date().toISOString().split("T")[0],
@@ -78,28 +184,67 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
       category: "general",
     });
     setEditingTx(null);
-    setIsModalOpen(true);
+    setIsTxModalOpen(true);
   };
 
-  const openEditModal = (tx: Transaction) => {
-    setFormData(tx);
+  const openEditTxModal = (tx: Transaction) => {
+    setTxFormData(tx);
     setEditingTx(tx);
-    setIsModalOpen(true);
+    setIsTxModalOpen(true);
+  };
+  
+  const openNewRecModal = (type: "one-time" | "installment" | "subscription") => {
+    setRecFormData({
+      type,
+      title: "",
+      totalAmount: 0,
+      paidAmount: 0,
+      startDate: new Date().toISOString().split("T")[0],
+      status: "pending",
+      period: type === "subscription" ? "monthly" : undefined
+    });
+    setEditingRec(null);
+    setIsRecModalOpen(true);
+  };
+
+  const openEditRecModal = (rec: Receivable) => {
+    setRecFormData(rec);
+    setEditingRec(rec);
+    setIsRecModalOpen(true);
   };
 
   // Calcular balance y totales
   const filteredTxs = transactions.filter(tx => {
-    const isAppModeMatch = appMode === "project" ? (tx.category === "project" || tx.category === "general") : (tx.category === "general" || tx.category === "workshop" || tx.category === "task" || tx.category === "budget");
-    if (!isAppModeMatch && tx.category !== "general") return false; // Basic filter for general compatibility
-    
     if (filterType !== "all" && tx.type !== filterType) return false;
     if (filterCategory !== "all" && tx.category !== filterCategory) return false;
     return true;
   });
 
-  const totalIncomes = transactions.filter(t => t.type === "income").reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
-  const totalExpenses = transactions.filter(t => t.type === "expense").reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+  const totalIncomes = filteredTxs.filter(t => t.type === "income").reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+  const totalExpenses = filteredTxs.filter(t => t.type === "expense").reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
   const balance = totalIncomes - totalExpenses;
+
+  const monthlyData = useMemo(() => {
+    const data: Record<string, { month: string; valueIncome: number; valueExpense: number }> = {};
+    
+    [...filteredTxs].forEach(tx => {
+       if(!tx.date) return;
+       const monthStr = tx.date.substring(0, 7); // e.g. 2026-05
+       if(!data[monthStr]) {
+          const [year, m] = monthStr.split('-');
+          const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+          data[monthStr] = {
+             month: `${monthNames[parseInt(m) - 1]} ${year}`,
+             valueIncome: 0,
+             valueExpense: 0
+          };
+       }
+       if(tx.type === 'income') data[monthStr].valueIncome += Number(tx.amount) || 0;
+       else data[monthStr].valueExpense += Number(tx.amount) || 0;
+    });
+
+    return Object.keys(data).sort().map(k => data[k]);
+  }, [filteredTxs]);
 
   const getReferenceName = (tx: Transaction) => {
     if (tx.category === "project" && tx.referenceId) {
@@ -111,161 +256,344 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
     if (tx.category === "task" && tx.referenceId) {
       return tasks.find(t => t.id === tx.referenceId)?.description || "Tarea desconocida";
     }
+    if (tx.category === "workshop" && tx.referenceId) {
+      const device = devices.find(d => d.id === tx.referenceId);
+      return device ? `${device.brand} ${device.model}` : "Equipo desconocido";
+    }
     return "General";
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-6 flex flex-col h-full relative">
+      {/* Header & Tabs */}
+      <div className="flex flex-col gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <Coins size={28} className="text-green-600 dark:text-green-500" />
             Finanzas
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Control de ingresos, egresos y balance general.
+            Control pagos, facturación y suscripciones
           </p>
         </div>
-        <button
-          onClick={openNewModal}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 shadow-sm transition-colors text-sm w-full sm:w-auto justify-center"
-        >
-          <Plus size={18} /> Nuevo Registro
-        </button>
-      </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col items-center justify-center">
-          <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mb-3">
-            <TrendingUp size={24} />
-          </div>
-          <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest text-center">Ingresos</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">${totalIncomes.toLocaleString('es-AR')}</p>
-        </div>
-        
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col items-center justify-center">
-          <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mb-3">
-            <TrendingDown size={24} />
-          </div>
-          <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest text-center">Egresos</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">${totalExpenses.toLocaleString('es-AR')}</p>
-        </div>
-
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-2xl shadow-md text-white flex flex-col items-center justify-center">
-          <div className="w-12 h-12 bg-white/20 text-white rounded-full flex items-center justify-center mb-3">
-            <Wallet size={24} />
-          </div>
-          <p className="text-sm font-semibold text-indigo-100 uppercase tracking-widest text-center">Balance Total</p>
-          <p className="text-3xl font-bold mt-1">${balance.toLocaleString('es-AR')}</p>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
-        <div className="relative flex-1">
-          <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <select 
-            value={filterType} 
-            onChange={e => setFilterType(e.target.value as "all" | "income" | "expense")}
-            className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500"
+        <div className="flex gap-2 bg-gray-100 dark:bg-gray-800 p-1.5 rounded-xl border border-gray-200 dark:border-gray-700 w-full md:w-fit overflow-x-auto">
+          <button 
+            onClick={() => setActiveTab('cashflow')}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${activeTab === 'cashflow' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
           >
-            <option value="all">Todos los Tipos</option>
-            <option value="income">Solo Ingresos</option>
-            <option value="expense">Solo Egresos</option>
-          </select>
-        </div>
-        <div className="relative flex-1">
-          <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <select 
-            value={filterCategory} 
-            onChange={e => setFilterCategory(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500"
+            <Wallet size={18} /> Flujo de Caja
+          </button>
+          <button 
+            onClick={() => setActiveTab('receivables')}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${activeTab === 'receivables' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
           >
-            <option value="all">Todas las Categorías</option>
-            <option value="general">General</option>
-            <option value="project">Proyectos</option>
-            <option value="budget">Presupuestos</option>
-            <option value="task">Tareas</option>
-          </select>
+            <CreditCard size={18} /> Cuentas por Cobrar
+          </button>
+          <button 
+            onClick={() => setActiveTab('subscriptions')}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${activeTab === 'subscriptions' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
+          >
+            <Repeat size={18} /> Suscripciones
+          </button>
         </div>
       </div>
 
-      {/* Transactions List */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700">
-                <th className="p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fecha</th>
-                <th className="p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Descripción</th>
-                <th className="p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Categoría</th>
-                <th className="p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Monto</th>
-                <th className="p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {filteredTxs.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-gray-500">No hay registros que coincidan.</td>
-                </tr>
-              ) : (
-                filteredTxs.map(tx => (
-                  <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                    <td className="p-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-100">
-                      {new Date(tx.date).toLocaleDateString('es-AR')}
-                    </td>
-                    <td className="p-4">
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">{tx.description}</p>
-                    </td>
-                    <td className="p-4">
-                      <span className="px-2.5 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-md text-xs font-medium inline-block">
-                        {tx.category === 'project' ? "Proyecto" : tx.category === 'budget' ? "Presupuesto" : tx.category === 'task' ? "Tarea" : "General"}
-                        {tx.referenceId && <span className="ml-1 opacity-70">({getReferenceName(tx)})</span>}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right whitespace-nowrap">
-                      <span className={`font-bold ${tx.type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {tx.type === 'income' ? '+' : '-'}${Number(tx.amount).toLocaleString('es-AR')}
-                      </span>
-                    </td>
-                    <td className="p-4 text-center whitespace-nowrap">
-                      <div className="flex justify-center gap-2">
-                        <button onClick={() => openEditModal(tx)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded-lg">
-                          <Edit2 size={16} />
-                        </button>
-                        <button onClick={() => handleDelete(tx.id)} className="p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 rounded-lg">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
+      {activeTab === 'cashflow' && (
+        <>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hidden sm:flex">
+             <div />
+             <button
+              onClick={openNewTxModal}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 shadow-sm transition-colors text-sm w-full sm:w-auto justify-center"
+            >
+              <Plus size={18} /> Nuevo Registro
+            </button>
+          </div>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col items-center justify-center">
+              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mb-3">
+                <TrendingUp size={24} />
+              </div>
+              <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest text-center">Ingresos (Pdo)</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">${totalIncomes.toLocaleString('es-AR')}</p>
+            </div>
+            
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col items-center justify-center">
+              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mb-3">
+                <TrendingDown size={24} />
+              </div>
+              <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest text-center">Egresos (Pdo)</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">${totalExpenses.toLocaleString('es-AR')}</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-2xl shadow-md text-white flex flex-col items-center justify-center">
+              <div className="w-12 h-12 bg-white/20 text-white rounded-full flex items-center justify-center mb-3">
+                <Wallet size={24} />
+              </div>
+              <p className="text-sm font-semibold text-indigo-100 uppercase tracking-widest text-center">Balance del Período</p>
+              <p className="text-3xl font-bold mt-1">${balance.toLocaleString('es-AR')}</p>
+            </div>
+          </div>
+
+          {/* Chart */}
+          {monthlyData.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" className="dark:stroke-gray-700" />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} tickFormatter={(value) => `$${value}`} />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(0,0,0,0.05)' }}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', backgroundColor: 'var(--tw-prose-bg, white)' }}
+                    formatter={(value: number, name: string) => [`$${value.toLocaleString('es-AR')}`, name]}
+                    labelStyle={{ color: '#374151', fontWeight: 'bold' }}
+                  />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                  {filterType !== 'expense' && <Bar dataKey="valueIncome" name="Ingresos" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />}
+                  {filterType !== 'income' && <Bar dataKey="valueExpense" name="Egresos" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={40} />}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-3 bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+            <div className="relative flex-1">
+              <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <select 
+                value={filterType} 
+                onChange={e => setFilterType(e.target.value as "all" | "income" | "expense")}
+                className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">Todos los Tipos</option>
+                <option value="income">Solo Ingresos</option>
+                <option value="expense">Solo Egresos</option>
+              </select>
+            </div>
+            <div className="relative flex-1">
+              <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <select 
+                value={filterCategory} 
+                onChange={e => setFilterCategory(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">Todas las Categorías</option>
+                <option value="general">General</option>
+                <option value="project">Proyectos</option>
+                <option value="budget">Presupuestos</option>
+                <option value="task">Tareas</option>
+                <option value="workshop">Taller</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Transactions List */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden mb-[80px]">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700">
+                    <th className="p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fecha</th>
+                    <th className="p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Descripción</th>
+                    <th className="p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Categoría</th>
+                    <th className="p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Monto</th>
+                    <th className="p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center">Acciones</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {filteredTxs.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-gray-500">No hay registros que coincidan.</td>
+                    </tr>
+                  ) : (
+                    filteredTxs.map((tx: Transaction) => (
+                      <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <td className="p-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-100">
+                          {new Date(tx.date).toLocaleDateString('es-AR')}
+                        </td>
+                        <td className="p-4">
+                          <p className="font-semibold text-gray-900 dark:text-gray-100">{tx.description}</p>
+                        </td>
+                        <td className="p-4">
+                          <span className="px-2.5 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-md text-xs font-medium inline-block">
+                            {tx.category === 'project' ? "Proyecto" : tx.category === 'budget' ? "Presupuesto" : tx.category === 'task' ? "Tarea" : tx.category === "workshop" ? "Taller" : "General"}
+                            {tx.referenceId && (
+                              <span className="ml-1 opacity-70">
+                                (
+                                {tx.category === 'project' ? (
+                                  <a href={`#projects/${tx.referenceId}`} className="hover:text-blue-500 hover:underline">{getReferenceName(tx)}</a>
+                                ) : tx.category === 'workshop' ? (
+                                  <a href={`#devices/${tx.referenceId}`} className="hover:text-blue-500 hover:underline">{getReferenceName(tx)}</a>
+                                ) : tx.category === 'budget' ? (
+                                  <a href={`#budgets/${tx.referenceId}`} className="hover:text-blue-500 hover:underline">{getReferenceName(tx)}</a>
+                                ) : (
+                                  getReferenceName(tx)
+                                )}
+                                )
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right whitespace-nowrap">
+                          <span className={`font-bold ${tx.type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {tx.type === 'income' ? '+' : '-'}${Number(tx.amount).toLocaleString('es-AR')}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center whitespace-nowrap">
+                          <div className="flex justify-center gap-2">
+                            {tx.isAuto ? (
+                              <>
+                                <div className="p-1.5 text-gray-400 cursor-not-allowed" title="No puedes editar el monto de un registro automático. Tienes que editarlo en su lugar de origen.">
+                                  <Lock size={16} />
+                                </div>
+                                <button onClick={() => handleDeleteTx(tx)} title="Ocultar de Finanzas" className="p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 rounded-lg">
+                                  <Trash2 size={16} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={() => openEditTxModal(tx)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded-lg">
+                                  <Edit2 size={16} />
+                                </button>
+                                <button onClick={() => handleDeleteTx(tx)} className="p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 rounded-lg">
+                                  <Trash2 size={16} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
-      {isModalOpen && (
-        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingTx ? "Editar Registro" : "Nuevo Registro Financiero"}>
-          <form onSubmit={handleSave} className="p-6 space-y-4">
+      {activeTab === 'receivables' && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden mb-[80px]">
+          <div className="flex justify-between items-center p-4 border-b border-gray-100 dark:border-gray-700">
+            <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <CreditCard size={18} className="text-blue-500" />
+              Cuentas por Cobrar & Planes de Pago
+            </h3>
+            <div className="flex gap-2">
+              <button onClick={() => openNewRecModal('one-time')} className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors">
+                <Plus size={16} /> Factura
+              </button>
+              <button onClick={() => openNewRecModal('installment')} className="px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors">
+                <Plus size={16} /> Plan en Cuotas
+              </button>
+            </div>
+          </div>
+          <div className="p-0">
+            {receivables.filter(r => r.type !== 'subscription').length === 0 ? (
+              <p className="p-8 text-center text-gray-500">No hay cuentas por cobrar registradas.</p>
+            ) : (
+              <div className="grid gap-3 p-4">
+                {receivables.filter(r => r.type !== 'subscription').map(rec => (
+                   <div key={rec.id} className="bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          {rec.status === 'paid' ? <CheckCircle size={16} className="text-green-500" /> : <Clock size={16} className="text-amber-500" />}
+                          <h4 className="font-bold text-gray-900 dark:text-gray-100">{rec.title}</h4>
+                          <span className="text-xs px-2 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded font-semibold">
+                            {rec.type === 'one-time' ? 'Un solo pago' : 'Cuotas'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Cliente: {clients.find(c => c.id === rec.clientId)?.firstName} {clients.find(c => c.id === rec.clientId)?.lastName || 'Desconocido'} | Inicio: {new Date(rec.startDate).toLocaleDateString('es-AR')}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500 uppercase font-semibold">Monto Acumulado / Total</p>
+                          <p className="text-lg font-bold text-gray-900 dark:text-white">
+                            <span className={rec.paidAmount >= rec.totalAmount ? "text-green-600" : "text-amber-600"}>${rec.paidAmount.toLocaleString('es-AR')}</span> 
+                            <span className="text-gray-400 mx-1">/</span> 
+                            ${rec.totalAmount.toLocaleString('es-AR')}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                           <button onClick={() => openEditRecModal(rec)} className="px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded block text-sm font-semibold transition-colors">Editar</button>
+                           <button onClick={() => handleDeleteRec(rec.id)} className="px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/50 dark:text-red-300 rounded block text-sm font-semibold transition-colors"><Trash2 size={16}/></button>
+                        </div>
+                      </div>
+                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'subscriptions' && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden mb-[80px]">
+          <div className="flex justify-between items-center p-4 border-b border-gray-100 dark:border-gray-700">
+            <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <Repeat size={18} className="text-purple-500" />
+              Suscripciones y Abonos Mensuales
+            </h3>
+            <button onClick={() => openNewRecModal('subscription')} className="px-3 py-1.5 bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400 rounded-lg text-sm font-semibold flex items-center gap-1 transition-colors">
+              <Plus size={16} /> Nueva Suscripción
+            </button>
+          </div>
+          <div className="p-0">
+            {receivables.filter(r => r.type === 'subscription').length === 0 ? (
+              <p className="p-8 text-center text-gray-500">No hay suscripciones registradas.</p>
+            ) : (
+              <div className="grid gap-3 p-4">
+                {receivables.filter(r => r.type === 'subscription').map(sub => (
+                   <div key={sub.id} className="bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className={`w-2 h-2 rounded-full ${sub.status === 'active' ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <h4 className="font-bold text-gray-900 dark:text-gray-100">{sub.title}</h4>
+                          <span className="text-xs px-2 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded font-semibold uppercase tracking-wider">
+                            {sub.period === 'monthly' ? 'Mensual' : sub.period === 'weekly' ? 'Semanal' : 'Anual'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Cliente: {clients.find(c => c.id === sub.clientId)?.firstName} {clients.find(c => c.id === sub.clientId)?.lastName || 'Desconocido'}</p>
+                      </div>
+                      <div className="flex items-center gap-4 w-full sm:w-auto">
+                        <div className="text-right flex-1 sm:flex-none">
+                          <p className="text-xs text-gray-500 uppercase font-semibold">Valor</p>
+                          <p className="text-xl font-bold text-purple-600 dark:text-purple-400">${sub.totalAmount.toLocaleString('es-AR')}</p>
+                        </div>
+                        <div className="flex gap-2">
+                           <button onClick={() => openEditRecModal(sub)} className="px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded block text-sm font-semibold transition-colors">Editar</button>
+                           <button onClick={() => handleDeleteRec(sub.id)} className="px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/50 dark:text-red-300 rounded block text-sm font-semibold transition-colors"><Trash2 size={16}/></button>
+                        </div>
+                      </div>
+                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isTxModalOpen && (
+        <Modal isOpen={isTxModalOpen} onClose={() => setIsTxModalOpen(false)} title={editingTx ? "Editar Registro Financiero" : "Alta de Ingreso/Egreso"}>
+          <form onSubmit={handleSaveTx} className="p-6 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Tipo de Movimiento</label>
                 <div className="flex gap-2">
                   <button 
                     type="button"
-                    onClick={() => setFormData({...formData, type: 'income'})}
-                    className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm transition-colors border ${formData.type === 'income' ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-800 dark:text-green-400' : 'bg-white border-gray-200 text-gray-500 dark:bg-gray-800 dark:border-gray-700'}`}
+                    onClick={() => setTxFormData({...txFormData, type: 'income'})}
+                    className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm transition-colors border ${txFormData.type === 'income' ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-800 dark:text-green-400' : 'bg-white border-gray-200 text-gray-500 dark:bg-gray-800 dark:border-gray-700'}`}
                   >
                     <TrendingUp size={16} /> Ingreso
                   </button>
                   <button 
                     type="button"
-                    onClick={() => setFormData({...formData, type: 'expense'})}
-                    className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm transition-colors border ${formData.type === 'expense' ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400' : 'bg-white border-gray-200 text-gray-500 dark:bg-gray-800 dark:border-gray-700'}`}
+                    onClick={() => setTxFormData({...txFormData, type: 'expense'})}
+                    className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm transition-colors border ${txFormData.type === 'expense' ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400' : 'bg-white border-gray-200 text-gray-500 dark:bg-gray-800 dark:border-gray-700'}`}
                   >
                     <TrendingDown size={16} /> Egreso
                   </button>
@@ -276,8 +604,8 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Categoría</label>
                 <select 
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                  value={formData.category}
-                  onChange={e => setFormData({...formData, category: e.target.value, referenceId: undefined})}
+                  value={txFormData.category}
+                  onChange={e => setTxFormData({...txFormData, category: e.target.value as any, referenceId: undefined})}
                 >
                   <option value="general">General u Otros</option>
                   <option value="project">Asociado a Proyecto</option>
@@ -287,13 +615,13 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
               </div>
             </div>
 
-            {formData.category === 'project' && (
+            {txFormData.category === 'project' && (
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Seleccionar Proyecto</label>
                 <select 
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                  value={formData.referenceId || ""}
-                  onChange={e => setFormData({...formData, referenceId: e.target.value})}
+                  value={txFormData.referenceId || ""}
+                  onChange={e => setTxFormData({...txFormData, referenceId: e.target.value})}
                   required
                 >
                   <option value="">-- Seleccionar --</option>
@@ -302,13 +630,13 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
               </div>
             )}
 
-            {formData.category === 'budget' && (
+            {txFormData.category === 'budget' && (
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Seleccionar Presupuesto</label>
                 <select 
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                  value={formData.referenceId || ""}
-                  onChange={e => setFormData({...formData, referenceId: e.target.value})}
+                  value={txFormData.referenceId || ""}
+                  onChange={e => setTxFormData({...txFormData, referenceId: e.target.value})}
                   required
                 >
                   <option value="">-- Seleccionar --</option>
@@ -317,13 +645,13 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
               </div>
             )}
 
-            {formData.category === 'task' && (
+            {txFormData.category === 'task' && (
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Seleccionar Tarea</label>
                 <select 
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                  value={formData.referenceId || ""}
-                  onChange={e => setFormData({...formData, referenceId: e.target.value})}
+                  value={txFormData.referenceId || ""}
+                  onChange={e => setTxFormData({...txFormData, referenceId: e.target.value})}
                   required
                 >
                   <option value="">-- Seleccionar --</option>
@@ -338,8 +666,8 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
                 type="text" 
                 required 
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                value={formData.description}
-                onChange={e => setFormData({...formData, description: e.target.value})}
+                value={txFormData.description}
+                onChange={e => setTxFormData({...txFormData, description: e.target.value})}
                 placeholder="Ej. Compra de materiales, Pago de cliente..."
               />
             </div>
@@ -352,8 +680,8 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
                   step="0.01" 
                   required 
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                  value={formData.amount || ''}
-                  onChange={e => setFormData({...formData, amount: parseFloat(e.target.value)})}
+                  value={txFormData.amount || ''}
+                  onChange={e => setTxFormData({...txFormData, amount: parseFloat(e.target.value)})}
                 />
               </div>
               <div>
@@ -362,8 +690,8 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
                   type="date" 
                   required 
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                  value={formData.date}
-                  onChange={e => setFormData({...formData, date: e.target.value})}
+                  value={txFormData.date}
+                  onChange={e => setTxFormData({...txFormData, date: e.target.value})}
                 />
               </div>
             </div>
@@ -371,7 +699,7 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
             <div className="flex gap-3 pt-4">
               <button 
                 type="button" 
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => setIsTxModalOpen(false)}
                 className="flex-1 px-4 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancelar
@@ -386,6 +714,160 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
           </form>
         </Modal>
       )}
+
+      {isRecModalOpen && (
+        <Modal isOpen={isRecModalOpen} onClose={() => setIsRecModalOpen(false)} title={editingRec ? "Editar Acuerdo/Cuenta" : "Nuevo Acuerdo de Pago / Suscripción"}>
+          <form onSubmit={handleSaveRec} className="p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Cliente</label>
+              <select 
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                value={recFormData.clientId || ""}
+                onChange={e => setRecFormData({...recFormData, clientId: e.target.value})}
+                required
+              >
+                <option value="">-- Seleccionar --</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{recFormData.type === 'subscription' ? 'Nombre de Suscripción' : 'Concepto de Factura/Cuotas'}</label>
+              <input 
+                type="text" 
+                required 
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                value={recFormData.title}
+                onChange={e => setRecFormData({...recFormData, title: e.target.value})}
+                placeholder={recFormData.type === 'subscription' ? "Abono Mantenimiento IT" : "Proyecto Web XYZ"}
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  {recFormData.type === 'subscription' ? 'Valor por Período ($)' : 'Monto Total ($)'}
+                </label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  required 
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-blue-600 dark:text-blue-400"
+                  value={recFormData.totalAmount || ''}
+                  onChange={e => setRecFormData({...recFormData, totalAmount: parseFloat(e.target.value)})}
+                />
+              </div>
+              {recFormData.type !== 'subscription' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Monto Cobrado Hasta Ahora ($)</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-green-600 dark:text-green-400"
+                    value={recFormData.paidAmount || ''}
+                    onChange={e => setRecFormData({...recFormData, paidAmount: parseFloat(e.target.value)})}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+               <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Fecha de Inicio / Venta</label>
+                  <input 
+                    type="date" 
+                    required 
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    value={recFormData.startDate}
+                    onChange={e => setRecFormData({...recFormData, startDate: e.target.value})}
+                  />
+               </div>
+               {recFormData.type === 'subscription' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Período de Facturación</label>
+                    <select 
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                      value={recFormData.period || "monthly"}
+                      onChange={e => setRecFormData({...recFormData, period: e.target.value as any})}
+                    >
+                      <option value="weekly">Semanal</option>
+                      <option value="monthly">Mensual</option>
+                      <option value="yearly">Anual</option>
+                    </select>
+                  </div>
+               )}
+            </div>
+            
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Estado</label>
+              <select 
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                value={recFormData.status || "pending"}
+                onChange={e => setRecFormData({...recFormData, status: e.target.value as any})}
+              >
+                {recFormData.type === 'subscription' ? (
+                  <>
+                    <option value="active">Activa</option>
+                    <option value="cancelled">Cancelada / Pausada</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="pending">Pendiente de Pago</option>
+                    <option value="paid">Pagado Completo</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <button 
+                type="button" 
+                onClick={() => setIsRecModalOpen(false)}
+                className="flex-1 px-4 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="submit" 
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-sm transition-colors"
+              >
+                {editingRec ? "Actualizar" : "Guardar Acuerdo"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      <Modal 
+        isOpen={!!itemToDelete} 
+        onClose={() => setItemToDelete(null)} 
+        title="Eliminar Registro"
+      >
+        <div className="p-4">
+          <div className="flex items-center gap-3 text-red-600 dark:text-red-400 mb-4">
+            <Trash2 size={24} />
+            <p className="font-semibold">¿Estás seguro de eliminar este registro?</p>
+          </div>
+          <p className="text-gray-600 dark:text-gray-300 text-sm mb-6">
+            Esta acción no se puede deshacer.
+          </p>
+          <div className="flex justify-end gap-3 mt-6">
+            <button 
+              onClick={() => setItemToDelete(null)} 
+              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-bold"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={confirmDelete} 
+              className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-sm font-bold"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

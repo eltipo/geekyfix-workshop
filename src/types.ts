@@ -101,6 +101,12 @@ export interface ProjectDoc {
   date: string;
 }
 
+export interface ProjectNoteHistory {
+  date: string;
+  notes: string;
+  author: string;
+}
+
 export interface Project {
   id: string;
   clientId: string;
@@ -110,6 +116,8 @@ export interface Project {
   status: 'active' | 'completed' | 'on-hold';
   documents: ProjectDoc[];
   notes?: string;
+  noteHistory?: ProjectNoteHistory[];
+  customFields?: { id: string; key: string; value: string }[];
 }
 
 export interface Budget {
@@ -142,13 +150,43 @@ export interface ServiceType {
   category?: string;
 }
 
+export interface Installment {
+  id: string;
+  number: number;
+  amount: number;
+  dueDate: string;
+  isPaid: boolean;
+  paidDate?: string;
+  transactionId?: string;
+}
+
+export interface Receivable {
+  id: string;
+  clientId?: string;
+  title: string;
+  description?: string;
+  type: 'one-time' | 'installment' | 'subscription';
+  totalAmount: number; 
+  paidAmount: number;   
+  startDate: string;
+  dueDate?: string;     
+  installments?: Installment[];
+  period?: 'monthly' | 'weekly' | 'yearly'; 
+  status: 'pending' | 'active' | 'completed' | 'cancelled';
+  referenceType?: 'project' | 'budget' | 'task' | 'workshop' | 'general';
+  referenceId?: string;
+}
+
 export interface Transaction {
   id: string;
   type: 'income' | 'expense';
   amount: number;
   date: string;
   description: string;
-  category: 'general' | 'project' | 'budget' | 'task';
+  category: 'general' | 'project' | 'budget' | 'task' | 'workshop';
   referenceId?: string; 
   createdAt?: string;
+  isAuto?: boolean;
+  receivableId?: string;
+  installmentId?: string;
 }

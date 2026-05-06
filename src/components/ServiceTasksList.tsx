@@ -12,6 +12,7 @@ export function ServiceTasksList({ clientId, projectId }: { clientId?: string, p
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<"all" | "pending" | "completed">("all");
 
   useEffect(() => {
     Promise.all([api.getServiceTasks(), api.getClients()]).then(([ts, clis]) => {
@@ -46,25 +47,51 @@ export function ServiceTasksList({ clientId, projectId }: { clientId?: string, p
 
   const filteredTasks = tasks
     .filter(t => {
-      if (projectId) return t.projectId === projectId;
-      if (clientId) return t.clientId === clientId;
-      return true;
+      let match = true;
+      if (projectId) match = match && t.projectId === projectId;
+      if (clientId) match = match && t.clientId === clientId;
+      if (filterType === "pending") match = match && !t.isCompleted;
+      if (filterType === "completed") match = match && t.isCompleted;
+      return match;
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50 p-2 rounded-xl border border-gray-100 dark:border-gray-800">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50/50 dark:bg-gray-900/50 p-2 rounded-xl border border-gray-100 dark:border-gray-800 gap-3">
         <h2 className="text-base font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 pl-2">
           <CheckCircle2 size={18} className="text-blue-500" />
           Tareas Realizadas
         </h2>
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-bold transition-all shadow-sm active:scale-95"
-        >
-          <Plus size={14} /> Nueva Tarea
-        </button>
+        
+        <div className="flex flex-col sm:flex-row w-full sm:w-auto items-stretch sm:items-center gap-2">
+          <div className="flex bg-gray-200/50 dark:bg-gray-800 p-1 rounded-lg">
+            <button
+              onClick={() => setFilterType("all")}
+              className={`flex-1 sm:flex-none px-3 py-1 text-xs font-semibold rounded-md transition-all ${filterType === "all" ? "bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"}`}
+            >
+              Todas
+            </button>
+            <button
+              onClick={() => setFilterType("pending")}
+              className={`flex-1 sm:flex-none px-3 py-1 text-xs font-semibold rounded-md transition-all ${filterType === "pending" ? "bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"}`}
+            >
+              Pendientes
+            </button>
+            <button
+              onClick={() => setFilterType("completed")}
+              className={`flex-1 sm:flex-none px-3 py-1 text-xs font-semibold rounded-md transition-all ${filterType === "completed" ? "bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"}`}
+            >
+              Completadas
+            </button>
+          </div>
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm active:scale-95 shrink-0"
+          >
+            <Plus size={14} /> Nueva Tarea
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-2">

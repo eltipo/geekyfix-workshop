@@ -141,18 +141,24 @@ app.use("/api", async (req, res, next) => {
     return next();
   }
   
-  const authHeader = req.headers.authorization;
-  const tokenQuery = req.query.token;
+  const appToken = req.headers['x-app-token'] as string | undefined;
+  const tokenQuery = req.query.token as string | undefined;
   
-  const token = (authHeader && authHeader.split(" ")[1]) || tokenQuery;
+  const token = appToken || tokenQuery;
   
-  const db = await readDb();
-  const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "geekyfix123";
-  
-  if (!token || token !== currentPassword) {
-    return res.status(401).json({ error: "No autorizado" });
+  try {
+    const db = await readDb();
+    const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "geekyfix123";
+    
+    if (!token || token !== currentPassword) {
+      console.log(`[AUTH FAILED] Path: ${req.path}, Token received: ${token}, Expected: ${currentPassword}`);
+      return res.status(401).json({ error: "No autorizado" });
+    }
+    next();
+  } catch (err) {
+    console.error("Auth middleware error:", err);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
-  next();
 });
 
 app.post("/api/settings/password", async (req, res) => {
@@ -726,7 +732,26 @@ app.put("/api/projects/:id", async (req, res) => {
   const index = db.projects.findIndex((p: any) => p.id === req.params.id);
   if (index === -1) return res.status(404).json({ error: "Not found" });
   
-  db.projects[index] = { ...db.projects[index], ...req.body };
+  const currentProject = db.projects[index];
+  const newNotes = req.body.notes;
+
+  if (newNotes !== undefined && newNotes !== currentProject.notes) {
+    if (!currentProject.noteHistory) {
+      currentProject.noteHistory = [];
+    }
+    // Only save to history if there was an actual previous note that isn't empty
+    if (currentProject.notes && currentProject.notes.trim() !== "") {
+      currentProject.noteHistory.push({
+        date: new Date().toISOString(),
+        notes: currentProject.notes,
+        author: "Usuario"
+      });
+    }
+    // Also, if someone passed their own noteHistory in req.body, we ignore it to prevent overriding our push
+    delete req.body.noteHistory;
+  }
+
+  db.projects[index] = { ...currentProject, ...req.body };
   await writeDb(db);
   res.json(db.projects[index]);
 });
@@ -798,6 +823,41 @@ app.get("/api/transactions", async (req, res) => {
   res.json(db.transactions || []);
 });
 
+app.get("/api/receivables", async (req, res) => {
+  const db = await readDb();
+  res.json(db.receivables || []);
+});
+
+app.post("/api/receivables", async (req, res) => {
+  const db = await readDb();
+  const rec = { ...req.body, id: uuidv4() };
+  if (!db.receivables) db.receivables = [];
+  db.receivables.push(rec);
+  await writeDb(db);
+  res.json(rec);
+});
+
+app.put("/api/receivables/:id", async (req, res) => {
+  const db = await readDb();
+  if (!db.receivables) db.receivables = [];
+  const idx = db.receivables.findIndex((r: any) => r.id === req.params.id);
+  if (idx !== -1) {
+    db.receivables[idx] = { ...db.receivables[idx], ...req.body };
+    await writeDb(db);
+    res.json(db.receivables[idx]);
+  } else {
+    res.status(404).json({ error: "Receivable not found" });
+  }
+});
+
+app.delete("/api/receivables/:id", async (req, res) => {
+  const db = await readDb();
+  if (!db.receivables) db.receivables = [];
+  db.receivables = db.receivables.filter((r: any) => r.id !== req.params.id);
+  await writeDb(db);
+  res.json({ success: true });
+});
+
 app.post("/api/transactions", async (req, res) => {
   const db = await readDb();
   const tx = { ...req.body, id: uuidv4() };
@@ -818,6 +878,21 @@ app.put("/api/transactions/:id", async (req, res) => {
   } else {
     res.status(404).json({ error: "Transaction not found" });
   }
+});
+
+app.get("/api/hidden-transactions", async (req, res) => {
+  const db = await readDb();
+  res.json(db.hiddenTransactions || []);
+});
+
+app.post("/api/hidden-transactions/:id", async (req, res) => {
+  const db = await readDb();
+  if (!db.hiddenTransactions) db.hiddenTransactions = [];
+  if (!db.hiddenTransactions.includes(req.params.id)) {
+    db.hiddenTransactions.push(req.params.id);
+  }
+  await writeDb(db);
+  res.json({ success: true });
 });
 
 app.delete("/api/transactions/:id", async (req, res) => {

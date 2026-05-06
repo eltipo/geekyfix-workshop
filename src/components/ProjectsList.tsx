@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { Project, Client, ProjectDoc, Budget } from "../types";
-import { Plus, Folder, FileText, Image as ImageIcon, Link as LinkIcon, Trash2, Edit2, ExternalLink, Calendar, User, Upload, X, CheckCircle2, Clock, AlertCircle, Camera, Maximize2, ReceiptText, ChevronRight, FileDown } from "lucide-react";
+import { Plus, Folder, FileText, Image as ImageIcon, Link as LinkIcon, Trash2, Edit2, ExternalLink, Calendar, User, Upload, X, CheckCircle2, Clock, AlertCircle, Camera, Maximize2, ReceiptText, ChevronRight, FileDown, History, List } from "lucide-react";
 import { Modal } from "./Modal";
 import { ServiceTasksList } from "./ServiceTasksList";
 import jsPDF from "jspdf";
@@ -28,6 +28,8 @@ export function ProjectsList({
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [clientFilter, setClientFilter] = useState<string>("all");
 
   useEffect(() => {
     loadData();
@@ -117,8 +119,38 @@ export function ProjectsList({
         </button>
       </div>
 
+      <div className="flex gap-4 mb-4">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+        >
+          <option value="all">Todos los estados</option>
+          <option value="active">Activo</option>
+          <option value="completed">Completado</option>
+          <option value="on-hold">En espera</option>
+        </select>
+        
+        <select
+          value={clientFilter}
+          onChange={(e) => setClientFilter(e.target.value)}
+          className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+        >
+          <option value="all">Todos los clientes</option>
+          {clients.map(c => (
+            <option key={c.id} value={c.id}>
+              {c.firstName} {c.lastName}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {projects.map(project => {
+        {projects.filter(p => {
+          if (statusFilter !== "all" && p.status !== statusFilter) return false;
+          if (clientFilter !== "all" && p.clientId !== clientFilter) return false;
+          return true;
+        }).map(project => {
           const client = clients.find(c => c.id === project.clientId);
           const projectBudgets = budgets.filter(b => b.projectId === project.id);
           const isApproved = projectBudgets.some(b => b.status === 'approved');
@@ -345,11 +377,51 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
   const [linkName, setLinkName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [showNoteHistory, setShowNoteHistory] = useState(false);
   const [notes, setNotes] = useState(project.notes || "");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [editingDoc, setEditingDoc] = useState<ProjectDoc | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
+
+  const [isAddingField, setIsAddingField] = useState(false);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [fieldKey, setFieldKey] = useState("");
+  const [fieldValue, setFieldValue] = useState("");
+
+  const handleSaveField = () => {
+    if (!fieldKey.trim()) return;
+    const currentFields = project.customFields || [];
+    
+    if (editingFieldId) {
+      onUpdateProject({
+        customFields: currentFields.map(f => f.id === editingFieldId ? { ...f, key: fieldKey, value: fieldValue } : f)
+      });
+      setEditingFieldId(null);
+    } else {
+      onUpdateProject({
+        customFields: [...currentFields, { id: crypto.randomUUID(), key: fieldKey, value: fieldValue }]
+      });
+      setIsAddingField(false);
+    }
+    setFieldKey("");
+    setFieldValue("");
+  };
+
+  const handleDeleteField = (id: string) => {
+    if (confirm("¿Eliminar este campo personalizado?")) {
+      onUpdateProject({
+        customFields: (project.customFields || []).filter(f => f.id !== id)
+      });
+    }
+  };
+
+  const startEditingField = (field: {id: string, key: string, value: string}) => {
+    setFieldKey(field.key);
+    setFieldValue(field.value);
+    setEditingFieldId(field.id);
+    setIsAddingField(false);
+  };
 
   const handleSaveNotes = () => {
     onUpdateProject({ notes });
@@ -655,16 +727,43 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
                   autoFocus
                 />
               ) : (
-                <div 
-                  className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 min-h-[80px] cursor-pointer hover:border-blue-300 dark:hover:border-blue-500 transition-colors"
-                  onClick={() => setIsEditingNotes(true)}
-                >
-                  {project.notes ? (
-                    <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{project.notes}</p>
-                  ) : (
-                    <p className="text-sm text-gray-400 italic">Haz clic para agregar notas...</p>
+                <>
+                  <div 
+                    className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 min-h-[80px] cursor-pointer hover:border-blue-300 dark:hover:border-blue-500 transition-colors"
+                    onClick={() => setIsEditingNotes(true)}
+                  >
+                    {project.notes ? (
+                      <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{project.notes}</p>
+                    ) : (
+                      <p className="text-sm text-gray-400 italic">Haz clic para agregar notas...</p>
+                    )}
+                  </div>
+                  {project.noteHistory && project.noteHistory.length > 0 && (
+                    <div className="mt-3">
+                      <button 
+                        onClick={() => setShowNoteHistory(!showNoteHistory)}
+                        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                      >
+                        <History size={14} />
+                        {showNoteHistory ? "Ocultar historial" : "Ver historial de cambios"}
+                      </button>
+                      
+                      {showNoteHistory && (
+                        <div className="mt-3 space-y-3 pl-2 border-l-2 border-gray-200 dark:border-gray-700">
+                          {project.noteHistory.slice().reverse().map((h, i) => (
+                            <div key={i} className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg text-sm">
+                              <div className="flex justify-between items-center mb-1 pb-1 border-b border-gray-200 dark:border-gray-700">
+                                <span className="font-medium text-gray-700 dark:text-gray-300">{h.author}</span>
+                                <span className="text-xs text-gray-500">{new Date(h.date).toLocaleString('es-AR')}</span>
+                              </div>
+                              <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{h.notes}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </div>
 
@@ -711,6 +810,90 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
         </div>
           
         <div className="p-4 pt-0 space-y-4">
+            {/* Custom Fields Section */}
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <List size={18} className="text-gray-400" />
+                  Campos Personalizados
+                </h4>
+                <button
+                  onClick={() => setIsAddingField(true)}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium flex items-center gap-1"
+                >
+                  <Plus size={14} /> Agregar Campo
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {(project.customFields || []).map(field => (
+                  <div key={field.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg group border border-transparent hover:border-gray-200 dark:hover:border-gray-700 transition-colors">
+                    {editingFieldId === field.id ? (
+                      <div className="w-full flex flex-col sm:flex-row gap-2">
+                        <input
+                          value={fieldKey}
+                          onChange={(e) => setFieldKey(e.target.value)}
+                          placeholder="Nombre del campo (ej. SO)"
+                          className="flex-1 px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
+                        />
+                        <input
+                          value={fieldValue}
+                          onChange={(e) => setFieldValue(e.target.value)}
+                          placeholder="Valor"
+                          className="flex-[2] px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
+                        />
+                        <div className="flex gap-2 justify-end sm:justify-start">
+                          <button onClick={handleSaveField} className="text-blue-600 hover:text-blue-700 font-medium text-xs px-2">Guardar</button>
+                          <button onClick={() => setEditingFieldId(null)} className="text-gray-500 hover:text-gray-700 font-medium text-xs px-2">Cancelar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 flex-1 min-w-0">
+                          <span className="text-xs font-bold text-gray-500 w-32 break-words">{field.key}:</span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 break-words">{field.value}</span>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end mt-2 sm:mt-0">
+                          <button onClick={() => startEditingField(field)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" title="Editar">
+                            <Edit2 size={14} />
+                          </button>
+                          <button onClick={() => handleDeleteField(field.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" title="Eliminar">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+                
+                {isAddingField && (
+                  <div className="flex flex-col sm:flex-row gap-2 p-3 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-lg">
+                    <input
+                      value={fieldKey}
+                      onChange={(e) => setFieldKey(e.target.value)}
+                      placeholder="Nombre del campo"
+                      className="flex-1 px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
+                      autoFocus
+                    />
+                    <input
+                      value={fieldValue}
+                      onChange={(e) => setFieldValue(e.target.value)}
+                      placeholder="Valor del campo"
+                      className="flex-[2] px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
+                    />
+                    <div className="flex gap-2 justify-end sm:justify-start">
+                      <button onClick={handleSaveField} disabled={!fieldKey.trim()} className="text-blue-600 hover:text-blue-700 font-medium text-xs px-2 disabled:opacity-50">Guardar</button>
+                      <button onClick={() => { setIsAddingField(false); setFieldKey(""); setFieldValue(""); }} className="text-gray-500 hover:text-gray-700 font-medium text-xs px-2">Cancelar</button>
+                    </div>
+                  </div>
+                )}
+                
+                {(!project.customFields || project.customFields.length === 0) && !isAddingField && (
+                  <p className="text-sm text-gray-400 italic">No hay campos personalizados.</p>
+                )}
+              </div>
+            </div>
+
             <div>
               <ServiceTasksList projectId={project.id} clientId={project.clientId} />
             </div>
@@ -733,7 +916,7 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
               {project.documents.map(doc => {
               const isImage = doc.type === 'image';
               const Content = (
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 h-full">
                   {isImage && (
                     <div className="aspect-video w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-900 relative group/img">
                       <img 
@@ -747,13 +930,13 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
                       </div>
                     </div>
                   )}
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-3 flex-1">
                     <div className={`p-2 rounded-lg shrink-0 ${
                       isImage ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400' :
                       doc.type === 'link' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' :
-                      'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+                      'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
                     }`}>
-                      {isImage ? <ImageIcon size={20} /> : doc.type === 'link' ? <LinkIcon size={20} /> : <FileText size={20} />}
+                      {isImage ? <ImageIcon size={20} /> : doc.type === 'link' ? <LinkIcon size={20} /> : <FileDown size={20} />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-gray-900 dark:text-gray-100 text-sm truncate">{doc.name}</p>
@@ -763,17 +946,24 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
                       <button 
                         onClick={() => startEditingDoc(doc)}
                         className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                        title="Editar nombre"
                       >
                         <Edit2 size={14} />
                       </button>
                       <button 
                         onClick={() => handleDeleteDoc(doc.id)}
                         className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                        title="Eliminar"
                       >
                         <Trash2 size={14} />
                       </button>
-                      <ExternalLink size={14} className="mt-1.5 ml-1 text-gray-300 group-hover:text-blue-500 transition-colors shrink-0" />
                     </div>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-50 dark:border-gray-800 mt-auto">
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                      {isImage ? 'Visualizar imagen' : doc.type === 'link' ? 'Abrir enlace' : 'Descargar archivo'}
+                    </span>
+                    <ExternalLink size={14} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
                   </div>
                 </div>
               );

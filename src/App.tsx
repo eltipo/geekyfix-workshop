@@ -196,20 +196,30 @@ export default function App() {
           
           <div className="flex items-center gap-1 sm:gap-2">
             {/* Mode Switcher */}
-            <div className="flex bg-white/10 p-1 rounded-xl mr-2">
+            <div className="flex bg-white/10 p-1 rounded-xl mr-1 sm:mr-2">
               <button 
                 onClick={() => { setAppMode("workshop"); setCurrentTab("home"); }}
-                className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${appMode === "workshop" ? "bg-white text-blue-600 shadow-sm" : "text-white/70 hover:text-white"}`}
+                className={`px-3 py-1 rounded-lg text-[10px] sm:text-xs font-bold transition-all ${appMode === "workshop" ? "bg-white text-blue-600 shadow-sm" : "text-white/70 hover:text-white"}`}
               >
                 Workshop
               </button>
               <button 
                 onClick={() => { setAppMode("project"); setCurrentTab("home"); }}
-                className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${appMode === "project" ? "bg-white text-blue-600 shadow-sm" : "text-white/70 hover:text-white"}`}
+                className={`px-3 py-1 rounded-lg text-[10px] sm:text-xs font-bold transition-all ${appMode === "project" ? "bg-white text-blue-600 shadow-sm" : "text-white/70 hover:text-white"}`}
               >
                 Projects
               </button>
             </div>
+
+            {/* Finance Shortcut */}
+            <button
+              onClick={() => setCurrentTab("finance")}
+              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl mr-2 text-[10px] sm:text-xs font-bold transition-all ${currentTab === "finance" ? "bg-green-500/20 text-green-100" : "bg-white/10 text-white/90 hover:bg-white/20"}`}
+              title="Finanzas"
+            >
+              <Wallet size={16} />
+              <span className="hidden md:inline">Finanzas</span>
+            </button>
 
             <button 
               onClick={() => setIsDrawerOpen(!isDrawerOpen)}

@@ -30,6 +30,7 @@ export function ClientsList({
   const [selectedToolId, setSelectedToolId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [typeFilter, setTypeFilter] = useState<"all" | "workshop" | "project">("all");
   const [mapAddress, setMapAddress] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importData, setImportData] = useState("");
@@ -54,19 +55,23 @@ export function ClientsList({
 
   const filteredClients = clients
     .filter((client) => {
-      const matchesMode = appMode === 'workshop' 
-        ? (client.type === 'workshop' || !client.type) 
-        : ((client.type as string) === 'project' || (client.type as string) === 'projects');
+      const clientType = client.type === "project" || (client.type as any) === "projects" ? "project" : "workshop";
       
-      if (!matchesMode) return false;
+      if (typeFilter !== 'all' && clientType !== typeFilter) return false;
 
       const query = searchQuery.toLowerCase();
-      return (
-        client.firstName.toLowerCase().includes(query) ||
-        client.lastName.toLowerCase().includes(query) ||
-        (client.email && client.email.toLowerCase().includes(query)) ||
-        (client.whatsapp && client.whatsapp.toLowerCase().includes(query))
-      );
+      if (!query) return true;
+      
+      const searchStr = [
+        client.firstName,
+        client.lastName,
+        client.email,
+        client.whatsapp,
+        client.address,
+        ...(client.customFields || []).map(cf => cf.value)
+      ].filter(Boolean).join(" ").toLowerCase();
+
+      return searchStr.includes(query);
     })
     .sort((a, b) => {
       const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
@@ -203,15 +208,48 @@ export function ClientsList({
       setIsImporting(true);
       setImportError(null);
       
-      let parsedData;
-      try {
-        parsedData = JSON.parse(importData);
-      } catch (e) {
-        throw new Error("El formato JSON no es válido.");
-      }
+      let parsedData: any[] = [];
+      
+      if (importData.trim().startsWith('[')) {
+        try {
+          parsedData = JSON.parse(importData);
+        } catch (e) {
+          throw new Error("El formato JSON no es válido.");
+        }
 
-      if (!Array.isArray(parsedData)) {
-        throw new Error("Los datos deben ser una lista de clientes.");
+        if (!Array.isArray(parsedData)) {
+          throw new Error("Los datos JSON deben ser una lista de clientes.");
+        }
+      } else {
+        // Simple CSV parser
+        const lines = importData.split('\n').filter(l => l.trim().length > 0);
+        if (lines.length > 1) {
+          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
+          
+          parsedData = lines.slice(1).map(line => {
+            // Regex to handle commas inside quotes
+            const rowValues = line.match(/(?:\"([^\"]*(?:\"\"[^\"]*)*)\"|([^,]+))/g) || [];
+            const obj: any = {};
+            
+            headers.forEach((header, index) => {
+               if (rowValues[index]) {
+                 let val = rowValues[index].replace(/^"|"$/g, '').trim();
+                 val = val.replace(/""/g, '"');
+                 
+                 // Maps headers back to fields 
+                 if (header.includes('nombre') && !header.includes('apellido')) obj.firstName = val;
+                 else if (header.includes('apellido')) obj.lastName = val;
+                 else if (header.includes('whatsapp') || header.includes('tel')) obj.whatsapp = val;
+                 else if (header.includes('email') || header.includes('correo')) obj.email = val;
+                 else if (header.includes('direcci') || header.includes('address')) obj.address = val;
+                 else if (header.includes('tipo') || header.includes('type')) obj.type = val.toLowerCase().includes('proyect') ? 'project' : 'workshop';
+               }
+            });
+            return obj;
+          });
+        } else {
+          throw new Error("No se detectaron datos válidos en el CSV/JSON.");
+        }
       }
 
       // Basic validation and cleaning
@@ -354,15 +392,26 @@ export function ClientsList({
       </div>
 
       {!showForm && !editingClient && (
-        <div className="relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={20} />
-          <input
-            type="text"
-            placeholder="Buscar por nombre, email o WhatsApp..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-          />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative group flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={20} />
+            <input
+              type="text"
+              placeholder="Buscar por nombre, email, WhatsApp, dirección..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+            />
+          </div>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as any)}
+            className="px-4 py-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none w-full sm:w-auto"
+          >
+            <option value="all">Todos los Tipos</option>
+            <option value="workshop">Taller</option>
+            <option value="project">Proyecto</option>
+          </select>
         </div>
       )}
 
@@ -774,24 +823,24 @@ export function ClientsList({
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Puedes importar clientes pegando un JSON válido o subiendo un archivo .json previamente exportado.
+            Puedes importar clientes pegando un JSON o CSV válido, o subiendo un archivo previamente exportado.
           </p>
           
           <div className="space-y-2">
-            <label className="block text-xs font-bold text-gray-500 uppercase">Subir archivo</label>
+            <label className="block text-xs font-bold text-gray-500 uppercase">Subir archivo (.json o .csv)</label>
             <input 
               type="file" 
-              accept=".json" 
+              accept=".json,.csv" 
               onChange={handleFileChange}
               className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-gray-700 dark:file:text-gray-300"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="block text-xs font-bold text-gray-500 uppercase">O pega el contenido JSON aquí</label>
+            <label className="block text-xs font-bold text-gray-500 uppercase">O pega el contenido (JSON/CSV) aquí</label>
             <textarea
               className="w-full h-40 p-3 text-xs font-mono rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder='[{"firstName": "Juan", "lastName": "Perez", ...}]'
+              placeholder='[{"firstName": "Juan", "lastName": "Perez", ...}] o ID,Nombre,Apellido,Telefono,Email,Direccion...'
               value={importData}
               onChange={(e) => setImportData(e.target.value)}
             ></textarea>

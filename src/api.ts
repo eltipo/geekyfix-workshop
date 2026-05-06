@@ -5,7 +5,7 @@ const localFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   const token = localStorage.getItem("app_token");
   const headers = new Headers(init?.headers);
   if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
+    headers.set("X-App-Token", token);
   }
   const response = await originalFetch(input, { ...init, headers });
   if (response.status === 401) {
@@ -250,8 +250,41 @@ export const api = {
       method: "DELETE",
     });
   },
+  getReceivables: async (): Promise<any[]> => {
+    const res = await fetch("/api/receivables");
+    return res.json();
+  },
+  createReceivable: async (rec: any): Promise<any> => {
+    const res = await fetch("/api/receivables", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rec),
+    });
+    return res.json();
+  },
+  updateReceivable: async (id: string, rec: any): Promise<any> => {
+    const res = await fetch(`/api/receivables/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rec),
+    });
+    return res.json();
+  },
+  deleteReceivable: async (id: string): Promise<void> => {
+    await fetch(`/api/receivables/${id}`, {
+      method: "DELETE",
+    });
+  },
   getTransactions: async (): Promise<any[]> => {
     const res = await fetch("/api/transactions");
+    return res.json();
+  },
+  getHiddenTransactions: async (): Promise<string[]> => {
+    const res = await fetch("/api/hidden-transactions");
+    return res.json();
+  },
+  hideAutoTransaction: async (id: string): Promise<any> => {
+    const res = await fetch(`/api/hidden-transactions/${id}`, { method: 'POST' });
     return res.json();
   },
   createTransaction: async (tx: any): Promise<any> => {

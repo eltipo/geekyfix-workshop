@@ -166,7 +166,7 @@ export function Dashboard({
               icon={<Calendar className="text-amber-600" size={20} />} 
               label="Calendario" 
               value={0} 
-              onClick={() => onNavigate("budgets")} // Placeholder for calendar navigation if needed
+              onClick={() => onNavigate("calendar")} 
               color="amber"
             />
           </>
