@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Lock, LogIn, AlertCircle, Fingerprint } from "lucide-react";
 import { api } from "../api";
-import { startAuthentication } from "@simplewebauthn/browser";
+import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 
 export function Login({ onLogin }: { onLogin: (token: string) => void }) {
   const [password, setPassword] = useState("");
@@ -37,6 +37,17 @@ export function Login({ onLogin }: { onLogin: (token: string) => void }) {
   const handleBiometricAuth = async () => {
     try {
       setError("");
+      
+      if (!browserSupportsWebAuthn()) {
+        setError("Tu navegador o dispositivo no soporta biometría (WebAuthn).");
+        return;
+      }
+
+      if (!window.isSecureContext) {
+        setError("El inicio de sesión biométrico requiere una conexión segura (HTTPS).");
+        return;
+      }
+
       setLoading(true);
       const options = await api.getWebauthnAuthOptions();
       const authResp = await startAuthentication(options);
@@ -49,8 +60,11 @@ export function Login({ onLogin }: { onLogin: (token: string) => void }) {
         setError("Autenticación biométrica falló");
       }
     } catch (err: any) {
-      if (err.message && err.message.includes("publickey-credentials-get")) {
+      console.error(err);
+      if (err.message && (err.message.includes("publickey-credentials-get") || err.message.includes("is not allowed by Permissions Policy"))) {
         setError("La biometría requiere abrir la app en una nueva pestaña (haz clic en el ícono de la esquina superior derecha).");
+      } else if (err.name === "NotAllowedError") {
+        setError("La operación fue cancelada o el tiempo de espera expiró.");
       } else {
         setError(err.message || "Error al iniciar con biometría. ¿Está configurado el dispositivo?");
       }

@@ -30,6 +30,14 @@ app.use(express.json());
 app.use("/uploads", express.static(UPLOADS_DIR));
 app.use("/data", express.static(DATA_DIR));
 
+// HTTPS Redirection middleware
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === "production" && req.headers["x-forwarded-proto"] === "http") {
+    return res.redirect(`https://${req.headers.host}${req.url}`);
+  }
+  next();
+});
+
 // Ensure db and uploads exist
 async function initDb() {
   try {

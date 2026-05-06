@@ -3,7 +3,7 @@ import { api } from "../api";
 import { ServiceType } from "../types";
 import { Download, Upload, ShieldCheck, AlertTriangle, RefreshCw, Database, HardDrive, History, Plus, Trash2, Edit2, Save, X, Briefcase, Info, ExternalLink, ChevronRight, Lock, Fingerprint } from "lucide-react";
 import { Modal } from "./Modal";
-import { startRegistration } from "@simplewebauthn/browser";
+import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 
 export function Settings() {
   const [isRestoring, setIsRestoring] = useState(false);
@@ -131,6 +131,18 @@ export function Settings() {
 
   const handleRegisterBiometrics = async () => {
     try {
+      setMessage(null);
+      
+      if (!browserSupportsWebAuthn()) {
+        setMessage({ type: 'error', text: "Tu navegador o dispositivo no soporta biometría (WebAuthn)." });
+        return;
+      }
+
+      if (!window.isSecureContext) {
+        setMessage({ type: 'error', text: "La configuración de biometría requiere una conexión segura (HTTPS)." });
+        return;
+      }
+
       setMessage({ type: 'success', text: "Iniciando configuración de biometría..." });
       const options = await api.getWebauthnRegisterOptions();
       const resp = await startRegistration(options);
@@ -138,8 +150,10 @@ export function Settings() {
       setMessage({ type: 'success', text: "¡Dispositivo registrado exitosamente para inicio de sesión biométrico!" });
     } catch (error: any) {
       console.error(error);
-      if (error.message && error.message.includes("publickey-credentials-create")) {
+      if (error.message && (error.message.includes("publickey-credentials-create") || error.message.includes("is not allowed by Permissions Policy"))) {
         setMessage({ type: 'error', text: "Para configurar la biometría, abre la app en una nueva pestaña (ícono superior derecho)." });
+      } else if (error.name === "NotAllowedError") {
+        setMessage({ type: 'error', text: "La operación de registro fue cancelada." });
       } else {
         setMessage({ type: 'error', text: "No se pudo registrar: " + (error.message || "Error desconocido") });
       }
