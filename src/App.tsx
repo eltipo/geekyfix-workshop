@@ -363,6 +363,7 @@ export default function App() {
               appMode={appMode}
               onSelectClient={handleSelectClient} 
               onSelectClientTasks={(id) => { setSelectedClientId(id); setCurrentTab("tasks"); }}
+              onSelectClientBudgets={(id) => { setSelectedClientId(id); setCurrentTab("budgets"); }}
               initialClientId={selectedClientId}
               setCurrentTab={setCurrentTab}
               setSelectedBudgetId={setSelectedBudgetId}
@@ -401,7 +402,19 @@ export default function App() {
           {currentTab === "report" && <DailyReport />}
           {currentTab === "tools" && <ToolsList />}
           {currentTab === "finance" && <FinanceList appMode={appMode} />}
-          {currentTab === "budgets" && <BudgetsList appMode={appMode} initialDeviceId={selectedDeviceId} initialBudgetId={selectedBudgetId} />}
+          {currentTab === "budgets" && (
+            <div>
+              {selectedClientId && (
+                <button
+                  onClick={() => setSelectedClientId(undefined)}
+                  className="mb-4 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  &larr; Todos los presupuestos
+                </button>
+              )}
+              <BudgetsList appMode={appMode} clientId={selectedClientId} initialDeviceId={selectedDeviceId} initialBudgetId={selectedBudgetId} />
+            </div>
+          )}
           {currentTab === "settings" && <Settings />}
           {currentTab === "calendar" && (
             <CalendarView 
@@ -431,20 +444,30 @@ export default function App() {
             </div>
           )}
           {currentTab === "projects" && (
-            <ProjectsList 
-              clientId={selectedClientId} 
-              initialProjectId={selectedProjectId}
-              onClose={() => setSelectedProjectId(undefined)}
-              onNavigateToBudget={(budgetId) => {
-                setSelectedBudgetId(budgetId);
-                setCurrentTab("budgets");
-              }}
-              onNavigateToClients={() => {
-                setClientFormOpen(true);
-                setCurrentTab("clients");
-                setSelectedClientId(undefined);
-              }}
-            />
+            <div>
+              {selectedClientId && (
+                <button
+                  onClick={() => setSelectedClientId(undefined)}
+                  className="mb-4 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  &larr; Todos los proyectos
+                </button>
+              )}
+              <ProjectsList 
+                clientId={selectedClientId} 
+                initialProjectId={selectedProjectId}
+                onClose={() => setSelectedProjectId(undefined)}
+                onNavigateToBudget={(budgetId) => {
+                  setSelectedBudgetId(budgetId);
+                  setCurrentTab("budgets");
+                }}
+                onNavigateToClients={() => {
+                  setClientFormOpen(true);
+                  setCurrentTab("clients");
+                  setSelectedClientId(undefined);
+                }}
+              />
+            </div>
           )}
         </div>
 

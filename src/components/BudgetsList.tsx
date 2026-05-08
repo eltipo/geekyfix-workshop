@@ -9,10 +9,12 @@ import { getBase64ImageFromUrl } from "../lib/utils";
 
 export function BudgetsList({ 
   appMode,
+  clientId,
   initialDeviceId,
   initialBudgetId
 }: { 
   appMode: "workshop" | "project",
+  clientId?: string,
   initialDeviceId?: string,
   initialBudgetId?: string
 }) {
@@ -382,6 +384,7 @@ export function BudgetsList({
   };
 
   const filteredBudgets = budgets.filter(budget => {
+    if (clientId && budget.clientId !== clientId) return false;
     return appMode === 'workshop' 
       ? (budget.type !== 'project' && (budget.type as string) !== 'projects') 
       : (budget.type === 'project' || (budget.type as string) === 'projects');

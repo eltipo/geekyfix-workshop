@@ -8,6 +8,7 @@ export function ClientsList({
   appMode,
   onSelectClient, 
   onSelectClientTasks, 
+  onSelectClientBudgets,
   initialClientId,
   setCurrentTab,
   setSelectedBudgetId,
@@ -16,6 +17,7 @@ export function ClientsList({
   appMode: "workshop" | "project",
   onSelectClient: (id: string) => void, 
   onSelectClientTasks?: (id: string) => void, 
+  onSelectClientBudgets?: (id: string) => void,
   initialClientId?: string,
   setCurrentTab: (tab: any) => void,
   setSelectedBudgetId: (id: string | undefined) => void,
@@ -30,7 +32,7 @@ export function ClientsList({
   const [selectedToolId, setSelectedToolId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const [typeFilter, setTypeFilter] = useState<"all" | "workshop" | "project">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "workshop" | "project">(appMode);
   const [mapAddress, setMapAddress] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importData, setImportData] = useState("");
@@ -43,6 +45,10 @@ export function ClientsList({
     api.getClients().then(setClients);
     api.getTools().then(setTools);
   }, []);
+
+  useEffect(() => {
+    setTypeFilter(appMode);
+  }, [appMode]);
 
   useEffect(() => {
     if (initialClientId && clients.length > 0) {
@@ -687,21 +693,19 @@ export function ClientsList({
                   {appMode === 'project' ? 'Proyectos' : 'Equipos'}
                 </button>
                 <button
-                  onClick={() => { setSelectedBudgetId(undefined); setCurrentTab("budgets"); }}
+                  onClick={() => onSelectClientBudgets ? onSelectClientBudgets(selectedClientDetail.id) : setCurrentTab("budgets")}
                   className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-purple-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
-                  {appMode === 'project' ? <ReceiptText size={20} /> : <ClipboardList size={20} />}
-                  {appMode === 'project' ? 'Presupuestos' : 'Tareas'}
+                  <ReceiptText size={20} />
+                  Presupuestos
                 </button>
-                {appMode === 'project' && (
-                  <button
-                    onClick={() => onSelectClientTasks?.(selectedClientDetail.id)}
-                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
-                  >
-                    <ClipboardList size={20} />
-                    Tareas
-                  </button>
-                )}
+                <button
+                  onClick={() => onSelectClientTasks?.(selectedClientDetail.id)}
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <ClipboardList size={20} />
+                  Tareas
+                </button>
                 {selectedClientDetail.whatsapp && (
                   <a
                     href={`https://wa.me/${selectedClientDetail.whatsapp.replace(/\D/g, '')}`}

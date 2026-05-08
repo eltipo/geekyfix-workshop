@@ -29,11 +29,19 @@ export function ProjectsList({
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [clientFilter, setClientFilter] = useState<string>("all");
+  const [clientFilter, setClientFilter] = useState<string>(clientId || "all");
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (clientId) {
+      setClientFilter(clientId);
+    } else {
+      setClientFilter("all");
+    }
+  }, [clientId]);
 
   useEffect(() => {
     if (initialProjectId && projects.length > 0) {
