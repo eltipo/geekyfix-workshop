@@ -19,8 +19,9 @@ export function Settings() {
   const [passwordMsg, setPasswordMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
 
-  const APP_VERSION = "v1.5.0";
+  const APP_VERSION = "v1.6.0";
   const CHANGELOG = [
+    { version: "v1.6.0", date: "2026-05-06", changes: ["Autenticación biométrica (WebAuthn)", "Redirección automática a HTTPS", "Mejoras en seguridad y estabilidad"] },
     { version: "v1.5.0", date: "2026-04-16", changes: ["Gestión inteligente de historial (botón atrás móvil)", "Duplicado rápido de presupuestos", "Mejoras críticas en PDF (saltos de página y formato)", "Navegación dinámica entre Clientes/Proyectos"] },
     { version: "v1.4.5", date: "2026-04-13", changes: ["Integración de presupuestos con tickets", "Mejoras en navegación móvil (7 columnas)", "Alineación de botones en configuración"] },
     { version: "v1.4.0", date: "2026-04-12", changes: ["Reporte diario interactivo con modales", "Gestión de tipos de trabajo y precios"] },

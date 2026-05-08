@@ -153,7 +153,7 @@ async function writeDb(data: any) {
 app.post("/api/login", async (req, res) => {
   const { password } = req.body;
   const db = await readDb();
-  const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "geekyfix123";
+  const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "admin";
   
   if (password === currentPassword) {
     res.json({ success: true, token: currentPassword });
@@ -174,7 +174,7 @@ app.use("/api", async (req, res, next) => {
   
   try {
     const db = await readDb();
-    const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "geekyfix123";
+    const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "admin";
     
     if (!token || token !== currentPassword) {
       return res.status(401).json({ error: "No autorizado" });
@@ -189,7 +189,7 @@ app.use("/api", async (req, res, next) => {
 app.post("/api/settings/password", async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const db = await readDb();
-  const storedPassword = db.settings?.password || process.env.APP_PASSWORD || "geekyfix123";
+  const storedPassword = db.settings?.password || process.env.APP_PASSWORD || "admin";
   
   if (currentPassword !== storedPassword) {
     return res.status(401).json({ error: "La contraseña actual es incorrecta" });
@@ -333,7 +333,7 @@ app.post("/api/webauthn/auth-verify", async (req, res) => {
       passkey.counter = verification.authenticationInfo.newCounter;
       await writeDb(db);
       
-      const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "geekyfix123";
+      const currentPassword = db.settings?.password || process.env.APP_PASSWORD || "admin";
       res.json({ verified: true, token: currentPassword });
     } else {
       res.status(400).json({ error: "No verificado" });

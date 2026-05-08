@@ -13,7 +13,7 @@ export function Dashboard({
   onSetDeviceFilter
 }: { 
   appMode: "workshop" | "project",
-  onNavigate: (tab: "clients" | "devices" | "report" | "tools" | "budgets" | "projects") => void,
+  onNavigate: (tab: "home" | "clients" | "devices" | "report" | "tools" | "budgets" | "settings" | "calendar" | "tasks" | "projects" | "finance") => void,
   onSelectDevice: (deviceId: string) => void,
   onSelectProject: (projectId: string) => void,
   onSetDeviceFilter: (filter: DeviceFilterStatus) => void
