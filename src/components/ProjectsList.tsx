@@ -488,12 +488,27 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
       const projectTasks = tasks.filter(t => t.projectId === project.id);
       
       const doc = new jsPDF();
-      let yPos = 20;
+      
+      // Add Logo
+      try {
+        const logoBase64 = await getBase64ImageFromUrl("/data/logo.png");
+        doc.addImage(logoBase64, "PNG", 25, 15, 18, 18);
+      } catch (error) {
+        console.warn("Could not load logo for PDF", error);
+      }
 
       // Header
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "bold");
+      doc.text("GeekyFix Workshop", 105, 25, { align: "center" });
+
+      let yPos = 45;
+
+      // Title
       doc.setFontSize(22);
       doc.setTextColor(37, 99, 235); // blue-600
-      doc.text("Resumen de Proyecto", 20, yPos);
+      doc.text("Resumen de Proyecto", 105, yPos, { align: "center" });
       yPos += 15;
 
       doc.setFontSize(14);
@@ -626,6 +641,16 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
             console.warn("Could not add image to PDF", e);
           }
         }
+      }
+
+      // Footer
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(156, 163, 175);
+        doc.text("Este es un informe de proyecto generado por GeekyFix Workshop System.", 105, 280, { align: "center" });
+        doc.text(`GeekyFix Workshop - Ignacio Abril - Página ${i} de ${pageCount}`, 105, 285, { align: "center" });
       }
 
       doc.save(`Proyecto_${project.name.replace(/\s+/g, '_')}.pdf`);

@@ -99,13 +99,13 @@ export function BudgetsList({
     doc.setFontSize(14);
     doc.setTextColor(0, 0, 0);
     doc.setFont("helvetica", "bold");
-    doc.text("GeekyFix - Projects", 105, 25, { align: "center" });
+    doc.text("GeekyFix Workshop", 105, 25, { align: "center" });
 
     let currentY = 50;
     
     // Title
     doc.setFontSize(22);
-    doc.setTextColor(0, 0, 0);
+    doc.setTextColor(37, 99, 235); // blue-600
     const title = budget.title || (budget.type === 'project' ? `Propuesta de Servicios Digitales: ${project?.name || "Proyecto"}` : "PRESUPUESTO DE SERVICIOS");
     const splitTitle = doc.splitTextToSize(title, 160);
     doc.text(splitTitle, 20, currentY);
@@ -317,6 +317,16 @@ export function BudgetsList({
       doc.setFont("helvetica", "italic");
       const notes = doc.splitTextToSize(`Nota: ${budget.notes}`, 170);
       doc.text(notes, 20, currentY);
+    }
+    
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(156, 163, 175);
+      doc.text("Este es un presupuesto generado por GeekyFix Workshop System.", 105, 280, { align: "center" });
+      doc.text(`GeekyFix Workshop - Ignacio Abril - Página ${i} de ${pageCount}`, 105, 285, { align: "center" });
     }
     
     doc.save(`Presupuesto_${client?.lastName}_${budget.id.substring(0, 8)}.pdf`);

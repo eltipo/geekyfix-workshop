@@ -39,34 +39,40 @@ export function DailyReport() {
     // Add Logo
     try {
       const logoBase64 = await getBase64ImageFromUrl("/data/logo.png");
-      doc.addImage(logoBase64, "PNG", 20, 10, 15, 15);
+      doc.addImage(logoBase64, "PNG", 25, 15, 18, 18);
     } catch (error) {
       console.warn("Could not load logo for PDF", error);
     }
     
     // Header
-    doc.setFontSize(20);
-    doc.setTextColor(37, 99, 235); // blue-600
-    doc.text("GeekyFix Workshop", 105, 20, { align: "center" });
-    
-    doc.setFontSize(16);
+    doc.setFontSize(14);
     doc.setTextColor(0, 0, 0);
-    doc.text("REPORTE DIARIO", 105, 30, { align: "center" });
+    doc.setFont("helvetica", "bold");
+    doc.text("GeekyFix Workshop", 105, 25, { align: "center" });
+    
+    doc.setFontSize(22);
+    doc.setTextColor(37, 99, 235); // blue-600
+    doc.text("REPORTE DIARIO", 105, 45, { align: "center" });
     
     doc.setFontSize(10);
-    doc.text(`Fecha del reporte: ${selectedDate}`, 150, 45);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Fecha del reporte: ${selectedDate}`, 150, 60);
     
     // Summary
     doc.setFontSize(12);
-    doc.text("RESUMEN:", 20, 50);
+    doc.setFont("helvetica", "bold");
+    doc.text("RESUMEN:", 20, 70);
     doc.setFontSize(10);
-    doc.text(`Equipos Ingresados: ${dailyDevices.length}`, 20, 57);
-    doc.text(`Tickets Completados: ${dailyTickets.length}`, 20, 62);
-    doc.text(`Recaudación Total: $${totalRevenue.toLocaleString()}`, 20, 67);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Equipos Ingresados: ${dailyDevices.length}`, 20, 77);
+    doc.text(`Tickets Completados: ${dailyTickets.length}`, 20, 82);
+    doc.text(`Recaudación Total: $${totalRevenue.toLocaleString()}`, 20, 87);
     
     // Table - Entries
     doc.setFontSize(12);
-    doc.text("INGRESOS DEL DÍA:", 20, 80);
+    doc.setFont("helvetica", "bold");
+    doc.text("INGRESOS DEL DÍA:", 20, 100);
     
     const entryData = dailyDevices.map(d => {
       const client = clients[d.clientId];
@@ -78,7 +84,7 @@ export function DailyReport() {
     });
     
     autoTable(doc, {
-      startY: 85,
+      startY: 105,
       head: [["Equipo", "Cliente", "Problema"]],
       body: entryData,
       theme: "striped",
@@ -86,8 +92,9 @@ export function DailyReport() {
     });
     
     // Table - Completed
-    const finalY = (doc as any).lastAutoTable.finalY || 120;
+    const finalY = (doc as any).lastAutoTable.finalY || 140;
     doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
     doc.text("TRABAJOS FINALIZADOS:", 20, finalY + 15);
     
     const completedData = dailyTickets.map(t => {
@@ -108,9 +115,14 @@ export function DailyReport() {
     });
     
     // Footer
-    doc.setFontSize(8);
-    doc.setTextColor(156, 163, 175);
-    doc.text("GeekyFix Workshop - Reporte Interno", 105, 280, { align: "center" });
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(156, 163, 175);
+        doc.text("Este es un reporte interno generado por GeekyFix Workshop System.", 105, 280, { align: "center" });
+        doc.text(`GeekyFix Workshop - Ignacio Abril - Página ${i} de ${pageCount}`, 105, 285, { align: "center" });
+    }
     
     doc.save(`Reporte_Diario_${selectedDate}.pdf`);
   };

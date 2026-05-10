@@ -6,6 +6,7 @@ import { Modal } from "./Modal";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getBase64ImageFromUrl } from "../lib/utils";
 
 export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
   const [activeTab, setActiveTab] = useState<"cashflow" | "receivables" | "subscriptions">("cashflow");
@@ -278,32 +279,44 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
     return "General";
   };
 
-  const handleDownloadPDF = (sub: Receivable) => {
+  const handleDownloadPDF = async (sub: Receivable) => {
     const doc = new jsPDF();
     const client = clients.find(c => c.id === sub.clientId);
     const clientName = client ? `${client.firstName} ${client.lastName}` : "Cliente Desconocido";
     
+    // Add Logo
+    try {
+      const logoBase64 = await getBase64ImageFromUrl("/data/logo.png");
+      doc.addImage(logoBase64, "PNG", 25, 15, 18, 18);
+    } catch (error) {
+      console.warn("Could not load logo for PDF", error);
+    }
+
+    // Header
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.text("GeekyFix Workshop", 105, 25, { align: "center" });
+
     // Add title
     doc.setFontSize(22);
     doc.setTextColor(37, 99, 235); // bg-blue-600
     const title = sub.type === 'subscription' ? "Comprobante de Suscripción" : 
-                  sub.type === 'one-time' ? "Factura / Comprobante de Pago" : "Plan de Cuotas";
-    doc.text(title, 105, 20, { align: "center" });
-    
-    doc.setFontSize(14);
-    doc.setTextColor(0, 0, 0);
-    doc.text("GeekyFix Workshop", 105, 30, { align: "center" });
+                  "Comprobante de Pago"; // Removed 'Factura'
+    doc.text(title, 105, 45, { align: "center" });
     
     doc.setDrawColor(200, 200, 200);
-    doc.line(20, 35, 190, 35);
+    doc.line(20, 55, 190, 55);
     
     // Add Client Info
-    doc.setFontSize(12);
-    doc.text(`Cliente: ${clientName}`, 20, 45);
-    if (client?.email) doc.text(`Email: ${client.email}`, 20, 52);
-    if (client?.phone) doc.text(`Teléfono: ${client.phone}`, 20, 59);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Cliente: ${clientName}`, 20, 65);
+    if (client?.email) doc.text(`Email: ${client.email}`, 20, 71);
+    if (client?.phone) doc.text(`Teléfono: ${client.phone}`, 20, 77);
     
-    doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-AR')}`, 140, 45);
+    doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-AR')}`, 140, 65);
     
     // Details Table
     const bodyRows = [
@@ -324,20 +337,22 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
     bodyRows.push(["Estado", sub.status === 'active' || sub.status === 'completed' ? 'ACTIVO / PAGADO' : 'PENDIENTE']);
 
     autoTable(doc, {
-      startY: 70,
+      startY: 85,
       head: [["Detalle", "Información"]],
       body: bodyRows,
       headStyles: { fillColor: [37, 99, 235] },
       theme: 'striped'
     });
     
-    const finalY = (doc as any).lastAutoTable.finalY || 150;
+    const finalY = (doc as any).lastAutoTable.finalY || 160;
     
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text("Este es un comprobante generado por GeekyFix Workshop System.", 105, finalY + 20, { align: "center" });
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(156, 163, 175);
+    doc.text("Este es un comprobante generado por GeekyFix Workshop System.", 105, 280, { align: "center" });
+    doc.text("GeekyFix Workshop - Ignacio Abril", 105, 285, { align: "center" });
     
-    const fileNameSuffix = sub.type === 'subscription' ? 'suscripcion' : 'factura';
+    const fileNameSuffix = sub.type === 'subscription' ? 'suscripcion' : 'comprobante';
     doc.save(`${fileNameSuffix}_${clientName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`);
   };
 
