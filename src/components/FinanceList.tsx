@@ -24,6 +24,7 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
   const [editingRec, setEditingRec] = useState<Receivable | null>(null);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'tx', tx: Transaction } | { type: 'rec', id: string } | null>(null);
   const [selectedBudgetIds, setSelectedBudgetIds] = useState<string[]>([]);
+  const [clientSearch, setClientSearch] = useState("");
 
   // Filters for Cashflow
   const [filterType, setFilterType] = useState<"all" | "income" | "expense">("all");
@@ -215,6 +216,7 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
     });
     setEditingRec(null);
     setSelectedBudgetIds([]);
+    setClientSearch("");
     setIsRecModalOpen(true);
   };
 
@@ -222,6 +224,7 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
     setRecFormData(rec);
     setEditingRec(rec);
     setSelectedBudgetIds(rec.referenceId ? rec.referenceId.split(',') : []);
+    setClientSearch("");
     setIsRecModalOpen(true);
   };
 
@@ -318,7 +321,7 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
     }
 
     bodyRows.push(["Fecha de Inicio", new Date(sub.startDate).toLocaleDateString('es-AR')]);
-    bodyRows.push(["Estado", sub.status === 'active' || sub.status === 'paid' ? 'ACTIVO / PAGADO' : 'PENDIENTE']);
+    bodyRows.push(["Estado", sub.status === 'active' || sub.status === 'completed' ? 'ACTIVO / PAGADO' : 'PENDIENTE']);
 
     autoTable(doc, {
       startY: 70,
@@ -575,7 +578,7 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
                    <div key={rec.id} className="bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          {rec.status === 'paid' ? <CheckCircle size={16} className="text-green-500" /> : <Clock size={16} className="text-amber-500" />}
+                          {rec.status === 'completed' ? <CheckCircle size={16} className="text-green-500" /> : <Clock size={16} className="text-amber-500" />}
                           <h4 className="font-bold text-gray-900 dark:text-gray-100">{rec.title}</h4>
                           <span className="text-xs px-2 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded font-semibold">
                             {rec.type === 'one-time' ? 'Un solo pago' : 'Cuotas'}
@@ -804,14 +807,20 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
               <div className="flex gap-2">
                 <button 
                   type="button"
-                  onClick={() => setRecFormData({...recFormData, referenceType: 'project'})}
+                  onClick={() => {
+                    setRecFormData({...recFormData, referenceType: 'project', clientId: undefined});
+                    setSelectedBudgetIds([]);
+                  }}
                   className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm transition-colors border ${recFormData.referenceType === 'project' ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'bg-white border-gray-200 text-gray-500 dark:bg-gray-800 dark:border-gray-700'}`}
                 >
                   Proyecto
                 </button>
                 <button 
                   type="button"
-                  onClick={() => setRecFormData({...recFormData, referenceType: 'workshop'})}
+                  onClick={() => {
+                    setRecFormData({...recFormData, referenceType: 'workshop', clientId: undefined});
+                    setSelectedBudgetIds([]);
+                  }}
                   className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm transition-colors border ${recFormData.referenceType === 'workshop' ? 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400' : 'bg-white border-gray-200 text-gray-500 dark:bg-gray-800 dark:border-gray-700'}`}
                 >
                   Taller / Workshop
@@ -821,6 +830,15 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Cliente</label>
+              <div className="relative mb-2">
+                <input 
+                  type="text"
+                  placeholder="Buscar cliente..."
+                  className="w-full px-4 py-2 text-sm rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 outline-none"
+                  value={clientSearch}
+                  onChange={e => setClientSearch(e.target.value)}
+                />
+              </div>
               <select 
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                 value={recFormData.clientId || ""}
@@ -831,8 +849,33 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
                 required
               >
                 <option value="">-- Seleccionar --</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+                {clients
+                  .filter(c => {
+                    // Type filter
+                    if (recFormData.referenceType === 'project') {
+                      if (!projects.some(p => p.clientId === c.id)) return false;
+                    } else if (recFormData.referenceType === 'workshop') {
+                      if (!devices.some(d => d.clientId === c.id)) return false;
+                    }
+                    
+                    // Search filter
+                    if (clientSearch) {
+                      const search = clientSearch.toLowerCase();
+                      return (c.firstName + " " + c.lastName).toLowerCase().includes(search) ||
+                             (c.email || "").toLowerCase().includes(search);
+                    }
+                    
+                    return true;
+                  })
+                  .map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
               </select>
+              {clients.length > 0 && clients.filter(c => {
+                  if (recFormData.referenceType === 'project') return projects.some(p => p.clientId === c.id);
+                  if (recFormData.referenceType === 'workshop') return devices.some(d => d.clientId === c.id);
+                  return true;
+                }).length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">No hay clientes con {recFormData.referenceType === 'project' ? 'proyectos' : 'equipos'} activos.</p>
+              )}
             </div>
 
             {recFormData.clientId && (
@@ -962,7 +1005,7 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
                 ) : (
                   <>
                     <option value="pending">Pendiente de Pago</option>
-                    <option value="paid">Pagado Completo</option>
+                    <option value="completed">Pagado Completo</option>
                   </>
                 )}
               </select>
