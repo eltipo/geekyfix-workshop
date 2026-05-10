@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { api } from "../api";
 import { Transaction, Project, Budget, ServiceTask, Device, Receivable, Client } from "../types";
-import { Coins, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Wallet, X, Filter, Lock, Repeat, CreditCard, ChevronDown, ChevronUp, CheckCircle, Clock } from "lucide-react";
+import { Coins, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Wallet, X, Filter, Lock, Repeat, CreditCard, ChevronDown, ChevronUp, CheckCircle, Clock, FileText, Download } from "lucide-react";
 import { Modal } from "./Modal";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
   const [activeTab, setActiveTab] = useState<"cashflow" | "receivables" | "subscriptions">("cashflow");
@@ -21,6 +23,7 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editingRec, setEditingRec] = useState<Receivable | null>(null);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'tx', tx: Transaction } | { type: 'rec', id: string } | null>(null);
+  const [selectedBudgetIds, setSelectedBudgetIds] = useState<string[]>([]);
 
   // Filters for Cashflow
   const [filterType, setFilterType] = useState<"all" | "income" | "expense">("all");
@@ -139,13 +142,19 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
   const handleSaveRec = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const dataToSave = {
+        ...recFormData,
+        referenceId: selectedBudgetIds.join(',')
+      };
+
       if (editingRec) {
-        await api.updateReceivable(editingRec.id, recFormData);
+        await api.updateReceivable(editingRec.id, dataToSave);
       } else {
-        await api.createReceivable(recFormData);
+        await api.createReceivable(dataToSave);
       }
       setIsRecModalOpen(false);
       setEditingRec(null);
+      setSelectedBudgetIds([]);
       fetchData();
     } catch (e) {
       console.error(e);
@@ -201,15 +210,18 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
       paidAmount: 0,
       startDate: new Date().toISOString().split("T")[0],
       status: "pending",
-      period: type === "subscription" ? "monthly" : undefined
+      period: type === "subscription" ? "monthly" : undefined,
+      referenceType: appMode === "project" ? "project" : "workshop"
     });
     setEditingRec(null);
+    setSelectedBudgetIds([]);
     setIsRecModalOpen(true);
   };
 
   const openEditRecModal = (rec: Receivable) => {
     setRecFormData(rec);
     setEditingRec(rec);
+    setSelectedBudgetIds(rec.referenceId ? rec.referenceId.split(',') : []);
     setIsRecModalOpen(true);
   };
 
@@ -261,6 +273,69 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
       return device ? `${device.brand} ${device.model}` : "Equipo desconocido";
     }
     return "General";
+  };
+
+  const handleDownloadPDF = (sub: Receivable) => {
+    const doc = new jsPDF();
+    const client = clients.find(c => c.id === sub.clientId);
+    const clientName = client ? `${client.firstName} ${client.lastName}` : "Cliente Desconocido";
+    
+    // Add title
+    doc.setFontSize(22);
+    doc.setTextColor(37, 99, 235); // bg-blue-600
+    const title = sub.type === 'subscription' ? "Comprobante de Suscripción" : 
+                  sub.type === 'one-time' ? "Factura / Comprobante de Pago" : "Plan de Cuotas";
+    doc.text(title, 105, 20, { align: "center" });
+    
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.text("GeekyFix Workshop", 105, 30, { align: "center" });
+    
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, 35, 190, 35);
+    
+    // Add Client Info
+    doc.setFontSize(12);
+    doc.text(`Cliente: ${clientName}`, 20, 45);
+    if (client?.email) doc.text(`Email: ${client.email}`, 20, 52);
+    if (client?.phone) doc.text(`Teléfono: ${client.phone}`, 20, 59);
+    
+    doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-AR')}`, 140, 45);
+    
+    // Details Table
+    const bodyRows = [
+      ["Concepto", sub.title],
+      ["Tipo", sub.type === 'subscription' ? 'Suscripción' : sub.type === 'one-time' ? 'Pago Único' : 'Financiado'],
+    ];
+
+    if (sub.type === 'subscription') {
+      bodyRows.push(["Período", sub.period === 'monthly' ? 'Mensual' : sub.period === 'weekly' ? 'Semanal' : 'Anual']);
+      bodyRows.push(["Monto del Abono", `$${sub.totalAmount.toLocaleString('es-AR')}`]);
+    } else {
+      bodyRows.push(["Monto Total", `$${sub.totalAmount.toLocaleString('es-AR')}`]);
+      bodyRows.push(["Monto Pagado", `$${sub.paidAmount.toLocaleString('es-AR')}`]);
+      bodyRows.push(["Monto Pendiente", `$${(sub.totalAmount - sub.paidAmount).toLocaleString('es-AR')}`]);
+    }
+
+    bodyRows.push(["Fecha de Inicio", new Date(sub.startDate).toLocaleDateString('es-AR')]);
+    bodyRows.push(["Estado", sub.status === 'active' || sub.status === 'paid' ? 'ACTIVO / PAGADO' : 'PENDIENTE']);
+
+    autoTable(doc, {
+      startY: 70,
+      head: [["Detalle", "Información"]],
+      body: bodyRows,
+      headStyles: { fillColor: [37, 99, 235] },
+      theme: 'striped'
+    });
+    
+    const finalY = (doc as any).lastAutoTable.finalY || 150;
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Este es un comprobante generado por GeekyFix Workshop System.", 105, finalY + 20, { align: "center" });
+    
+    const fileNameSuffix = sub.type === 'subscription' ? 'suscripcion' : 'factura';
+    doc.save(`${fileNameSuffix}_${clientName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`);
   };
 
   return (
@@ -518,6 +593,9 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
                           </p>
                         </div>
                         <div className="flex gap-2">
+                           <button onClick={() => handleDownloadPDF(rec)} className="p-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded block transition-colors" title="Descargar PDF">
+                             <FileText size={16} />
+                           </button>
                            <button onClick={() => openEditRecModal(rec)} className="px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded block text-sm font-semibold transition-colors">Editar</button>
                            <button onClick={() => handleDeleteRec(rec.id)} className="px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/50 dark:text-red-300 rounded block text-sm font-semibold transition-colors"><Trash2 size={16}/></button>
                         </div>
@@ -564,6 +642,9 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
                           <p className="text-xl font-bold text-purple-600 dark:text-purple-400">${sub.totalAmount.toLocaleString('es-AR')}</p>
                         </div>
                         <div className="flex gap-2">
+                           <button onClick={() => handleDownloadPDF(sub)} className="p-1.5 bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/50 dark:text-purple-300 rounded block transition-colors" title="Descargar PDF">
+                             <FileText size={16} />
+                           </button>
                            <button onClick={() => openEditRecModal(sub)} className="px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded block text-sm font-semibold transition-colors">Editar</button>
                            <button onClick={() => handleDeleteRec(sub.id)} className="px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/50 dark:text-red-300 rounded block text-sm font-semibold transition-colors"><Trash2 size={16}/></button>
                         </div>
@@ -719,17 +800,85 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
         <Modal isOpen={isRecModalOpen} onClose={() => setIsRecModalOpen(false)} title={editingRec ? "Editar Acuerdo/Cuenta" : "Nuevo Acuerdo de Pago / Suscripción"}>
           <form onSubmit={handleSaveRec} className="p-6 space-y-4">
             <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Origen / Tipo de Trabajo</label>
+              <div className="flex gap-2">
+                <button 
+                  type="button"
+                  onClick={() => setRecFormData({...recFormData, referenceType: 'project'})}
+                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm transition-colors border ${recFormData.referenceType === 'project' ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'bg-white border-gray-200 text-gray-500 dark:bg-gray-800 dark:border-gray-700'}`}
+                >
+                  Proyecto
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setRecFormData({...recFormData, referenceType: 'workshop'})}
+                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm transition-colors border ${recFormData.referenceType === 'workshop' ? 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400' : 'bg-white border-gray-200 text-gray-500 dark:bg-gray-800 dark:border-gray-700'}`}
+                >
+                  Taller / Workshop
+                </button>
+              </div>
+            </div>
+
+            <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Cliente</label>
               <select 
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                 value={recFormData.clientId || ""}
-                onChange={e => setRecFormData({...recFormData, clientId: e.target.value})}
+                onChange={e => {
+                  setRecFormData({...recFormData, clientId: e.target.value});
+                  setSelectedBudgetIds([]);
+                }}
                 required
               >
                 <option value="">-- Seleccionar --</option>
                 {clients.map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
               </select>
             </div>
+
+            {recFormData.clientId && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Presupuestos Asociados (Opcional)</label>
+                <div className="space-y-2 max-h-40 overflow-y-auto p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800">
+                  {budgets.filter(b => b.clientId === recFormData.clientId && (recFormData.referenceType === 'project' ? b.projectId : b.deviceId)).length === 0 ? (
+                    <p className="text-xs text-gray-500 italic">No se encontraron presupuestos del tipo seleccionado para este cliente.</p>
+                  ) : (
+                    budgets
+                      .filter(b => b.clientId === recFormData.clientId && (recFormData.referenceType === 'project' ? b.projectId : b.deviceId))
+                      .map(b => (
+                        <label key={b.id} className="flex items-center gap-3 p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700">
+                          <input 
+                            type="checkbox"
+                            checked={selectedBudgetIds.includes(b.id)}
+                            onChange={(e) => {
+                              const newIds = e.target.checked 
+                                ? [...selectedBudgetIds, b.id]
+                                : selectedBudgetIds.filter(id => id !== b.id);
+                              setSelectedBudgetIds(newIds);
+                              
+                              const selectedBuds = budgets.filter(bud => newIds.includes(bud.id));
+                              const total = selectedBuds.reduce((sum, bud) => sum + (bud.total || 0), 0);
+                              const titles = selectedBuds
+                                .map(bud => bud.title || `Presupuesto ${new Date(bud.date).toLocaleDateString()}`)
+                                .join(", ");
+
+                              setRecFormData(prev => ({
+                                ...prev,
+                                totalAmount: newIds.length > 0 ? total : prev.totalAmount,
+                                title: newIds.length > 0 ? titles : prev.title
+                              }));
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{b.title || "Presupuesto sin título"}</p>
+                            <p className="text-xs text-gray-500">${b.total.toLocaleString('es-AR')} - {new Date(b.date).toLocaleDateString()}</p>
+                          </div>
+                        </label>
+                      ))
+                  )}
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{recFormData.type === 'subscription' ? 'Nombre de Suscripción' : 'Concepto de Factura/Cuotas'}</label>
