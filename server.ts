@@ -1145,6 +1145,56 @@ app.post("/api/restore", upload.single("backup"), async (req, res) => {
   }
 });
 
+// Share PDF API
+app.post("/api/share-pdf", upload.single("pdf"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+  const expireAt = new Date();
+  expireAt.setDate(expireAt.getDate() + 7); // 1 week
+
+  const shareId = uuidv4();
+  const fileUrl = `/uploads/${req.file.filename}`;
+  
+  const db = await readDb();
+  if (!db.sharedFiles) db.sharedFiles = [];
+  db.sharedFiles.push({
+    id: shareId,
+    url: fileUrl,
+    expireAt: expireAt.toISOString()
+  });
+  await writeDb(db);
+
+  const host = req.headers.host;
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+  const publicUrl = `${protocol}://${host}/shared/${shareId}`;
+
+  res.json({ success: true, url: publicUrl });
+});
+
+app.get("/shared/:id", async (req, res) => {
+  try {
+    const db = await readDb();
+    const sharedFile = (db.sharedFiles || []).find((f: any) => f.id === req.params.id);
+    
+    if (!sharedFile) {
+      return res.status(404).send("Documento no encontrado o ha expirado.");
+    }
+
+    if (new Date() > new Date(sharedFile.expireAt)) {
+      return res.status(404).send("Este documento ha expirado (su validez es de 1 semana).");
+    }
+
+    const filename = sharedFile.url.replace('/uploads/', '');
+    const filePath = path.join(UPLOADS_DIR, filename);
+    
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+    res.sendFile(filePath);
+  } catch (error) {
+    res.status(500).send("Error al cargar el documento.");
+  }
+});
+
 // Catch-all for unmatched API routes
 app.all("/api/*", (req, res) => {
   console.log(`Unmatched API route: ${req.method} ${req.originalUrl}`);

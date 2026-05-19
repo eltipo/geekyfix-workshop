@@ -80,7 +80,7 @@ export function BudgetsList({
     }
   };
 
-  const generatePDF = async (budget: Budget) => {
+  const generatePDF = async (budget: Budget, returnBlob: boolean = false) => {
     const device = devices.find(d => d.id === budget.deviceId);
     const client = clients[budget.clientId];
     const project = projects.find(p => p.id === budget.projectId);
@@ -114,7 +114,7 @@ export function BudgetsList({
     // Metadata Row
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    const metadata = `Prestador: Ignacio Abril – GeekyFix  Cliente: ${client?.firstName} ${client?.lastName}  Fecha: ${budget.date}`;
+    const metadata = `Prestador: Ignacio Abril – GeekyFix  Cliente: ${client?.firstName} ${client?.lastName}  Fecha: ${new Date(budget.date).toLocaleDateString('es-AR')}`;
     doc.text(metadata, 20, currentY);
     currentY += 5;
     
@@ -329,26 +329,50 @@ export function BudgetsList({
       doc.text(`GeekyFix Workshop - Ignacio Abril - Página ${i} de ${pageCount}`, 105, 285, { align: "center" });
     }
     
-    doc.save(`Presupuesto_${client?.lastName}_${budget.id.substring(0, 8)}.pdf`);
+    if (returnBlob) {
+      return doc.output("blob");
+    } else {
+      doc.save(`Presupuesto_${client?.lastName}_${budget.id.substring(0, 8)}.pdf`);
+    }
   };
 
-  const shareWhatsApp = (budget: Budget) => {
-    const client = clients[budget.clientId];
-    const device = devices.find(d => d.id === budget.deviceId);
-    if (!client || !client.whatsapp) return;
+  const [isSharing, setIsSharing] = useState(false);
 
-    let message = `Hola *${client.firstName}*, te envío el presupuesto para tu *${device?.brand} ${device?.model}*.\n\n`;
-    message += `*Detalle:*`;
-    budget.items.forEach(item => {
-      message += `\n- ${item.title}: $${(item.amount * item.quantity).toLocaleString()}`;
-    });
-    message += `\n\n*TOTAL:* $${budget.total.toLocaleString()}`;
-    message += `\n\n¡Quedamos a la espera de tu confirmación!`;
+  const shareWhatsApp = async (budget: Budget) => {
+    setIsSharing(true);
+    try {
+      const client = clients[budget.clientId];
+      const project = projects.find(p => p.id === budget.projectId);
+      const device = devices.find(d => d.id === budget.deviceId);
+      if (!client || !client.whatsapp) {
+        alert("El cliente no tiene un número de WhatsApp configurado.");
+        setIsSharing(false);
+        return;
+      }
 
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${client.whatsapp.replace(/\D/g, '')}?text=${encodedMessage}`;
-    window.open(whatsappUrl, '_blank');
+      const pdfBlob = await generatePDF(budget, true);
+      const { url } = await api.sharePdf(pdfBlob as Blob);
+
+      let message = `Hola *${client.firstName}*, adjunto el presupuesto detallado de los servicios.\n\n`;
+      if (budget.type === 'device' && device) {
+        message = `Hola *${client.firstName}*, te envío el presupuesto para tu *${device.brand} ${device.model}*.\n\n`;
+      } else if (budget.type === 'project' && project) {
+        message = `Hola *${client.firstName}*, te envío el presupuesto de servicios para el proyecto *${project.name}*.\n\n`;
+      }
+      message += `📄 Puedes ver y descargar el documento PDF en el siguiente enlace (válido por 1 semana):\n${url}\n\n`;
+      message += `*TOTAL:* $${budget.total.toLocaleString()}\n\n¡Quedamos a la espera de tu confirmación!`;
+
+      const encodedMessage = encodeURIComponent(message);
+      const whatsappUrl = `https://wa.me/${client.whatsapp.replace(/\D/g, '')}?text=${encodedMessage}`;
+      window.open(whatsappUrl, '_blank');
+    } catch (e) {
+      console.error("Error sharing PDF via WhatsApp", e);
+      alert("Hubo un error al generar o subir el presupuesto. Por favor intenta de nuevo.");
+    } finally {
+      setIsSharing(false);
+    }
   };
+
   
   const handleApproveBudget = async (budget: Budget) => {
     setIsApproving(true);
@@ -752,9 +776,10 @@ export function BudgetsList({
           <div className="mt-3">
             <button 
               onClick={() => shareWhatsApp(selectedBudget)}
-              className="w-full bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition-colors"
+              disabled={isSharing}
+              className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors ${isSharing ? 'bg-green-400 text-white cursor-wait' : 'bg-green-600 text-white hover:bg-green-700'}`}
             >
-              <MessageCircle size={20} /> Enviar WhatsApp
+              <MessageCircle size={20} /> {isSharing ? 'Generando PDF...' : 'Enviar WhatsApp'}
             </button>
           </div>
         </div>

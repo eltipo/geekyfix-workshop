@@ -453,4 +453,17 @@ export const api = {
       throw new Error(`Invalid JSON response (${res.status}): ${text.substring(0, 100)}`);
     }
   },
+  sharePdf: async (pdfBlob: Blob): Promise<{ url: string }> => {
+    const formData = new FormData();
+    formData.append("pdf", pdfBlob, "documento.pdf");
+    
+    const res = await fetch("/api/share-pdf", {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to share PDF: ${res.statusText}`);
+    }
+    return res.json();
+  },
 };

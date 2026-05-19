@@ -301,8 +301,8 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
     // Add title
     doc.setFontSize(22);
     doc.setTextColor(37, 99, 235); // bg-blue-600
-    const title = sub.type === 'subscription' ? "Comprobante de Suscripción" : 
-                  "Comprobante de Pago"; // Removed 'Factura'
+    const title = sub.type === 'subscription' ? "Suscripción / Plan" : 
+                  "Recibo de Pago";
     doc.text(title, 105, 45, { align: "center" });
     
     doc.setDrawColor(200, 200, 200);
@@ -352,7 +352,7 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
     doc.text("Este es un comprobante generado por GeekyFix Workshop System.", 105, 280, { align: "center" });
     doc.text("GeekyFix Workshop - Ignacio Abril", 105, 285, { align: "center" });
     
-    const fileNameSuffix = sub.type === 'subscription' ? 'suscripcion' : 'comprobante';
+    const fileNameSuffix = sub.type === 'subscription' ? 'suscripcion' : 'recibo';
     doc.save(`${fileNameSuffix}_${clientName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`);
   };
 
