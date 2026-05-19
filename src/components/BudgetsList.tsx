@@ -127,10 +127,12 @@ export function BudgetsList({
     if (budget.summary) {
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
+      doc.setTextColor(37, 99, 235); // blue-600
       doc.text("1. Resumen del Proyecto", 20, currentY);
       currentY += 8;
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
+      doc.setTextColor(0, 0, 0); // black for body text
       const splitSummary = doc.splitTextToSize(budget.summary, 170);
       doc.text(splitSummary, 20, currentY);
       currentY += (splitSummary.length * 5) + 12;
@@ -140,6 +142,7 @@ export function BudgetsList({
     if (budget.scope && budget.scope.length > 0) {
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
+      doc.setTextColor(37, 99, 235); // blue-600
       doc.text("2. Alcance de los Servicios", 20, currentY);
       currentY += 10;
       
@@ -164,6 +167,7 @@ export function BudgetsList({
           let descX = 25 + titleWidth + 2;
           
           doc.setFont("helvetica", "normal");
+          doc.setTextColor(0, 0, 0); // Ensure black
           if (descX > 80) { // If title is long, start description on next line
             currentY += 5;
             descX = 30;

@@ -527,24 +527,48 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
           ['Descripción', project.description || 'Sin descripción'],
         ],
         theme: 'striped',
-        headStyles: { fillColor: [37, 99, 235] }
+        headStyles: { fillColor: [37, 99, 235] },
+        alternateRowStyles: { fillColor: [243, 244, 246] }
       });
       yPos = (doc as any).lastAutoTable.finalY + 15;
 
+      // Custom Fields
+      if (project.customFields && project.customFields.length > 0) {
+        if (yPos > 240) { doc.addPage(); yPos = 45; }
+        doc.setFontSize(14);
+        doc.setTextColor(37, 99, 235);
+        doc.text("Campos Personalizados", 20, yPos);
+        yPos += 5;
+        autoTable(doc, {
+          startY: yPos,
+          head: [['Campo', 'Información']],
+          body: project.customFields.map(f => [f.key, f.value]),
+          theme: 'striped',
+          headStyles: { fillColor: [37, 99, 235] },
+          alternateRowStyles: { fillColor: [243, 244, 246] }
+        });
+        yPos = (doc as any).lastAutoTable.finalY + 15;
+      }
+
       // Notes
       if (project.notes) {
+        if (yPos > 240) { doc.addPage(); yPos = 45; }
         doc.setFontSize(14);
+        doc.setTextColor(37, 99, 235);
         doc.text("Notas del Proyecto", 20, yPos);
         yPos += 7;
         doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
         const splitNotes = doc.splitTextToSize(project.notes, 170);
         doc.text(splitNotes, 20, yPos);
-        yPos += (splitNotes.length * 5) + 10;
+        yPos += (splitNotes.length * 5) + 15;
       }
 
       // Budgets
       if (budgets.length > 0) {
+        if (yPos > 240) { doc.addPage(); yPos = 45; }
         doc.setFontSize(14);
+        doc.setTextColor(37, 99, 235);
         doc.text("Presupuestos", 20, yPos);
         yPos += 5;
         autoTable(doc, {
@@ -556,16 +580,18 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
             `$${b.total.toLocaleString()}`,
             b.status === 'approved' ? 'Aprobado' : b.status === 'rejected' ? 'Rechazado' : 'Pendiente'
           ]),
-          theme: 'grid',
-          headStyles: { fillColor: [147, 51, 234] } // purple-600
+          theme: 'striped',
+          headStyles: { fillColor: [37, 99, 235] },
+          alternateRowStyles: { fillColor: [243, 244, 246] }
         });
         yPos = (doc as any).lastAutoTable.finalY + 15;
       }
 
       // Tasks
       if (projectTasks.length > 0) {
-        if (yPos > 250) { doc.addPage(); yPos = 20; }
+        if (yPos > 240) { doc.addPage(); yPos = 45; }
         doc.setFontSize(14);
+        doc.setTextColor(37, 99, 235);
         doc.text("Tareas y Servicios", 20, yPos);
         yPos += 5;
         autoTable(doc, {
@@ -578,8 +604,9 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
             `$${t.amount.toLocaleString()}`,
             t.isCompleted ? 'Completada' : 'Pendiente'
           ]),
-          theme: 'grid',
-          headStyles: { fillColor: [5, 150, 105] } // emerald-600
+          theme: 'striped',
+          headStyles: { fillColor: [37, 99, 235] },
+          alternateRowStyles: { fillColor: [243, 244, 246] }
         });
         yPos = (doc as any).lastAutoTable.finalY + 15;
       }
@@ -587,8 +614,9 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
       // Documentation (Links & Files)
       const otherDocs = project.documents.filter(d => d.type !== 'image');
       if (otherDocs.length > 0) {
-        if (yPos > 250) { doc.addPage(); yPos = 20; }
+        if (yPos > 240) { doc.addPage(); yPos = 45; }
         doc.setFontSize(14);
+        doc.setTextColor(37, 99, 235);
         doc.text("Documentación y Enlaces", 20, yPos);
         yPos += 5;
         autoTable(doc, {
@@ -600,8 +628,9 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
             d.date,
             'Link'
           ]),
-          theme: 'grid',
-          headStyles: { fillColor: [75, 85, 99] }, // gray-600
+          theme: 'striped',
+          headStyles: { fillColor: [37, 99, 235] },
+          alternateRowStyles: { fillColor: [243, 244, 246] },
           columnStyles: {
             0: { cellWidth: 42.5 },
             1: { cellWidth: 42.5 },
@@ -622,21 +651,24 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
       // Documentation & Images
       const images = project.documents.filter(d => d.type === 'image');
       if (images.length > 0) {
-        if (yPos > 240) { doc.addPage(); yPos = 20; }
+        if (yPos > 240) { doc.addPage(); yPos = 45; }
         doc.setFontSize(14);
+        doc.setTextColor(37, 99, 235);
         doc.text("Documentación Fotográfica", 20, yPos);
         yPos += 10;
+        doc.setTextColor(0, 0, 0);
 
         for (const img of images) {
           try {
-            if (yPos > 200) { doc.addPage(); yPos = 20; }
+            if (yPos > 180) { doc.addPage(); yPos = 45; }
             const base64 = await getBase64ImageFromUrl(img.url);
-            // Simple placeholder for image positioning - center and fixed width
             doc.addImage(base64, 'JPEG', 20, yPos, 170, 95);
             yPos += 100;
             doc.setFontSize(8);
+            doc.setTextColor(100, 100, 100);
             doc.text(`${img.name} - ${img.date}`, 20, yPos);
             yPos += 15;
+            doc.setTextColor(0, 0, 0);
           } catch (e) {
             console.warn("Could not add image to PDF", e);
           }
