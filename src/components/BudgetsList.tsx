@@ -123,12 +123,15 @@ export function BudgetsList({
     doc.line(20, currentY, 190, currentY);
     currentY += 15;
 
+    let sectionIndex = 1;
+
     // 1. Resumen
     if (budget.summary) {
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(37, 99, 235); // blue-600
-      doc.text("1. Resumen del Proyecto", 20, currentY);
+      doc.text(`${sectionIndex}. Resumen del Proyecto`, 20, currentY);
+      sectionIndex++;
       currentY += 8;
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
@@ -143,7 +146,8 @@ export function BudgetsList({
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(37, 99, 235); // blue-600
-      doc.text("2. Alcance de los Servicios", 20, currentY);
+      doc.text(`${sectionIndex}. Alcance de los Servicios`, 20, currentY);
+      sectionIndex++;
       currentY += 10;
       
       budget.scope.forEach((section) => {
@@ -188,13 +192,17 @@ export function BudgetsList({
     }
 
     // 3. Propuesta Económica
-    doc.addPage();
-    currentY = 20;
+    // Only add a page break if we have already drawn preceding parts (Summary or Scope)
+    if (sectionIndex > 1 && currentY > 50) {
+      doc.addPage();
+      currentY = 20;
+    }
 
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(0, 0, 0);
-    doc.text("3. Propuesta Económica", 20, currentY);
+    doc.setTextColor(37, 99, 235); // blue-600
+    doc.text(`${sectionIndex}. Propuesta Económica`, 20, currentY);
+    sectionIndex++;
     currentY += 10;
 
     // Direct Costs Table
@@ -276,10 +284,14 @@ export function BudgetsList({
     if (budget.timeline && budget.timeline.length > 0) {
       if (currentY > 230) { doc.addPage(); currentY = 20; }
       doc.setFontSize(14);
-      doc.text("4. Cronograma de Entrega", 20, currentY);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(37, 99, 235); // blue-600 heading
+      doc.text(`${sectionIndex}. Cronograma de Entrega`, 20, currentY);
+      sectionIndex++;
       currentY += 10;
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
+      doc.setTextColor(0, 0, 0); // black text
       budget.timeline.forEach(t => {
         doc.setFont("helvetica", "bold");
         const rangeText = t.range.endsWith(":") ? t.range : `${t.range}:`;
@@ -296,10 +308,13 @@ export function BudgetsList({
        if (currentY > 230) { doc.addPage(); currentY = 20; }
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
-      doc.text("5. Condiciones Comerciales", 20, currentY);
+      doc.setTextColor(37, 99, 235); // blue-600 heading
+      doc.text(`${sectionIndex}. Condiciones Comerciales`, 20, currentY);
+      sectionIndex++;
       currentY += 10;
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
+      doc.setTextColor(0, 0, 0); // black text
       
       if (budget.paymentTerms && budget.paymentTerms.length > 0) {
         const termsText = budget.paymentTerms.map(t => `${t.label}: ${t.details}`).join(", ");
@@ -423,6 +438,8 @@ export function BudgetsList({
 
   const filteredBudgets = budgets.filter(budget => {
     if (clientId && budget.clientId !== clientId) return false;
+    // General Service budgets are visible in both workshop and project modes
+    if (budget.type === 'service') return true;
     return appMode === 'workshop' 
       ? (budget.type !== 'project' && (budget.type as string) !== 'projects') 
       : (budget.type === 'project' || (budget.type as string) === 'projects');
