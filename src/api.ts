@@ -173,6 +173,23 @@ export const api = {
     });
     return res.json();
   },
+  diagnoseDevice: async (deviceId: string, messages: any[]): Promise<{ text: string }> => {
+    const res = await fetch(`/api/devices/${deviceId}/diagnose`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      try {
+        const json = JSON.parse(text);
+        throw new Error(json.error || `Error (${res.status})`);
+      } catch (e) {
+        throw new Error(`Error del servidor (${res.status}): ${text.substring(0, 100)}`);
+      }
+    }
+    return res.json();
+  },
   getTools: async (): Promise<Tool[]> => {
     const res = await fetch("/api/tools");
     return res.json();

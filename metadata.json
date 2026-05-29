@@ -1,5 +1,6 @@
 {
   "name": "Remix: GeekyFix WorkShop",
   "description": "Sistema de historia clínica para soporte técnico de equipos.",
-  "requestFramePermissions": ["publickey-credentials-create", "publickey-credentials-get"]
+  "requestFramePermissions": ["publickey-credentials-create", "publickey-credentials-get"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

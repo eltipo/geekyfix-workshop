@@ -1,5 +1,8 @@
+import dotenv from "dotenv";
+dotenv.config();
 import express from "express";
 import { createServer as createViteServer } from "vite";
+import { GoogleGenAI } from "@google/genai";
 import fs from "fs/promises";
 import { createReadStream } from "fs";
 import path from "path";
@@ -662,6 +665,150 @@ app.delete("/api/devices/:id", async (req, res) => {
   db.devices.splice(index, 1);
   await writeDb(db);
   res.json({ success: true });
+});
+
+app.post("/api/devices/:id/diagnose", async (req, res, next) => {
+  try {
+    const { messages } = req.body;
+    const db = await readDb();
+    const device = db.devices.find((d: any) => d.id === req.params.id);
+    if (!device) return res.status(404).json({ error: "Equipo no encontrado" });
+
+    // Find the client for extra context if needed
+    const client = db.clients.find((c: any) => c.id === device.clientId);
+
+    // Build details about the device
+    const clientName = client ? `${client.firstName} ${client.lastName}` : "No especificado";
+    const specs = device.hardwareDetails ? device.hardwareDetails.map((h: any) => `${h.key}: ${h.value}`).join(", ") : (device.hardware || "No especificado");
+    
+    let contextText = `=== DETALLES DEL EQUIPO ===
+Marca: ${device.brand}
+Modelo: ${device.model || "No especificado"}
+Tipo: ${device.deviceType === "Otro" ? device.deviceTypeOther : device.deviceType}
+Cliente: ${clientName}
+Especificaciones del hardware: ${specs}
+Problema inicial reportado: ${device.problem || "No especificado"}\n\n`;
+
+    // Add tickets context (reports, tasks, resolutions)
+    if (device.tickets && device.tickets.length > 0) {
+      contextText += `=== TICKETS / TAREAS Y REPORTES REGISTRADOS ===\n`;
+      device.tickets.forEach((t: any, idx: number) => {
+        contextText += `Ticket #${idx + 1}:
+  Fecha: ${t.date}
+  Estado: ${t.isCompleted ? "Completado" : "Pendiente"}
+  Descripción / Tarea: ${t.description}`;
+        if (t.resolution) {
+          contextText += `\n  Resolución: ${t.resolution}`;
+        }
+        if (t.resolutionItems && t.resolutionItems.length > 0) {
+          contextText += `\n  Tareas de resolución realizadas:\n` + t.resolutionItems.map((item: any) => `    - ${item.task} (Monto: $${item.amount})`).join("\n");
+        }
+        contextText += `\n\n`;
+      });
+    } else {
+      contextText += `No hay tickets registrados aún para este equipo.\n\n`;
+    }
+
+    contextText += `Usa la información anterior y las imágenes cargadas para diagnosticar problemas, responder preguntas técnicas, y sugerir procedimientos de reparación o pasos a seguir de forma directa y profesional.`;
+
+    // Process and load images to include
+    const allPhotos: string[] = [];
+    if (device.photos && Array.isArray(device.photos)) {
+      allPhotos.push(...device.photos);
+    }
+    if (device.tickets && Array.isArray(device.tickets)) {
+      device.tickets.forEach((t: any) => {
+        if (t.photos && Array.isArray(t.photos)) {
+          allPhotos.push(...t.photos);
+        }
+      });
+    }
+
+    // Deduplicate and take top 10 photos to keep payload optimal
+    const uniquePhotos = Array.from(new Set(allPhotos)).slice(0, 10);
+    const imageParts: any[] = [];
+
+    // Read unique local files
+    for (const photoUrl of uniquePhotos) {
+      const filename = path.basename(photoUrl);
+      const localPath = path.join(UPLOADS_DIR, filename);
+      try {
+        await fs.access(localPath);
+        const data = await fs.readFile(localPath);
+        const base64Data = data.toString("base64");
+        
+        let mimeType = "image/jpeg";
+        if (filename.toLowerCase().endsWith(".png")) mimeType = "image/png";
+        else if (filename.toLowerCase().endsWith(".gif")) mimeType = "image/gif";
+        else if (filename.toLowerCase().endsWith(".webp")) mimeType = "image/webp";
+
+        imageParts.push({
+          inlineData: {
+            mimeType,
+            data: base64Data
+          }
+        });
+      } catch (err) {
+        console.error(`No se pudo leer la imagen local ${localPath}:`, err);
+      }
+    }
+
+    // Format chat messages into Gemini API contents structure
+    // We insert our context details and the rich media into the FIRST user message
+    // so Gemini is grounded correctly from the beginning.
+    const contents: any[] = [];
+
+    if (Array.isArray(messages) && messages.length > 0) {
+      messages.forEach((msg: any, idx: number) => {
+        const parts: any[] = [];
+        
+        if (idx === 0 && msg.role === 'user') {
+          // Add grounding context text and all pictures to the initial user prompt
+          parts.push({ text: `Aquí tienes la información sobre el equipo y su historial:\n${contextText}\n\nPregunta inicial del usuario: ${msg.content}` });
+          imageParts.forEach((part) => parts.push(part));
+        } else {
+          parts.push({ text: msg.content });
+        }
+
+        contents.push({
+          role: msg.role === 'assistant' ? 'model' : 'user',
+          parts
+        });
+      });
+    } else {
+      // Fallback if messages array is empty
+      const parts: any[] = [{ text: `Hola, por favor asísteme con este equipo.\n${contextText}` }];
+      imageParts.forEach((part) => parts.push(part));
+      contents.push({
+        role: "user",
+        parts
+      });
+    }
+
+    // Now call Gemini model!
+    // Initialize GoogleGenAI client
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents,
+      config: {
+        systemInstruction: "Eres GeekyFix AI, un asistente de diagnóstico técnico experto en hardware, electrónica y software. Ayudas a los técnicos del taller a resolver problemas de computadoras, celulares, consolas y otros equipos. Analiza el problema, las especificaciones técnicas del equipo, los reportes o tareas de servicio pendientes, y las fotos del perfil del equipo (que pueden mostrar daños físicos, placas lógicas, o pantallas de error). Da respuestas en español, claras, profesionales, estructuradas y con consejos prácticos y lógicos paso a paso para diagnosticar, resolver problemas y completar los tickets. Ofrece soluciones muy detalladas electrónicas o de micro-soldadura donde amerite."
+      }
+    });
+
+    res.json({ text: response.text });
+  } catch (error: any) {
+    console.error("Error in diagnostics assistant endpoint:", error);
+    res.status(500).json({ error: error.message || "Error al procesar la solicitud con Gemini" });
+  }
 });
 
 app.post("/api/devices/:id/tickets", upload.array("photos"), async (req, res, next) => {

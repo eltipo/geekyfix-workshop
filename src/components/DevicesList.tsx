@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { Device, Client, Ticket } from "../types";
-import { Smartphone, Calendar, AlertCircle, FileText, Upload, Camera, X, Edit2, Trash2, ClipboardPlus, CheckCircle2, Plus, Cpu, MessageCircle, ArrowLeft, ChevronRight, ChevronLeft, Clock, Check, ReceiptText, Filter, Search, ChevronDown, GripVertical } from "lucide-react";
+import { Smartphone, Calendar, AlertCircle, FileText, Upload, Camera, X, Edit2, Trash2, ClipboardPlus, CheckCircle2, Plus, Cpu, MessageCircle, ArrowLeft, ChevronRight, ChevronLeft, Clock, Check, ReceiptText, Filter, Search, ChevronDown, GripVertical, Bot } from "lucide-react";
 import { Modal } from "./Modal";
 import { Reorder } from "motion/react";
+import { DeviceChatbot } from "./DeviceChatbot";
 
 export type DeviceFilterStatus = 'all' | 'pending' | 'completed' | 'no-tickets';
 
@@ -40,6 +41,11 @@ export function DevicesList({
   const [ticketFilter, setTicketFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [deviceFilter, setDeviceFilter] = useState<DeviceFilterStatus>(initialFilter);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeDetailTab, setActiveDetailTab] = useState<'info' | 'chat'>('info');
+
+  useEffect(() => {
+    setActiveDetailTab('info');
+  }, [selectedDeviceId]);
 
   useEffect(() => {
     Promise.all([api.getDevices(), api.getClients()]).then(([devs, clis]) => {
@@ -338,7 +344,41 @@ export function DevicesList({
             </div>
           </div>
           
-          {!clientId && clients[selectedDevice.clientId] && (
+          {/* Subtabs for Detail & AI Diagnostic Assistant */}
+          <div className="flex border-b border-gray-150 dark:border-gray-750 -mx-4 mb-4 bg-gray-50/50 dark:bg-gray-900/10">
+            <button
+              onClick={() => setActiveDetailTab('info')}
+              className={`flex-1 py-3 text-center text-sm font-bold border-b-2 transition-all flex items-center justify-center gap-2 ${
+                activeDetailTab === 'info'
+                  ? 'border-blue-600 text-blue-600 dark:border-indigo-500 dark:text-indigo-400 bg-white dark:bg-gray-800'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              <Smartphone size={16} />
+              Ficha del Equipo
+            </button>
+            <button
+              onClick={() => setActiveDetailTab('chat')}
+              className={`flex-1 py-3 text-center text-sm font-bold border-b-2 transition-all flex items-center justify-center gap-2 relative ${
+                activeDetailTab === 'chat'
+                  ? 'border-blue-600 text-blue-600 dark:border-indigo-500 dark:text-indigo-400 bg-white dark:bg-gray-800'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              <Bot size={16} className={activeDetailTab === 'chat' ? 'text-indigo-500 animate-pulse' : ''} />
+              Asistente Gemini AI
+              <span className="absolute right-4 sm:right-10 top-3 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+              </span>
+            </button>
+          </div>
+
+          {activeDetailTab === 'chat' ? (
+            <DeviceChatbot device={selectedDevice} />
+          ) : (
+            <>
+              {!clientId && clients[selectedDevice.clientId] && (
             <div 
               onClick={() => onNavigateToClient?.(selectedDevice.clientId)}
               className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all group"
@@ -622,6 +662,8 @@ export function DevicesList({
               </div>
             )}
           </div>
+            </>
+          )}
         </div>
       )}
 
