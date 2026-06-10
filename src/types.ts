@@ -156,6 +156,7 @@ export interface Installment {
   amount: number;
   dueDate: string;
   isPaid: boolean;
+  status?: 'paid' | 'pending' | 'unpaid';
   paidDate?: string;
   transactionId?: string;
 }

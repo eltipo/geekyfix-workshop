@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { api } from "../api";
 import { Transaction, Project, Budget, ServiceTask, Device, Receivable, Client } from "../types";
-import { Coins, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Wallet, X, Filter, Lock, Repeat, CreditCard, ChevronDown, ChevronUp, CheckCircle, Clock, FileText, Download } from "lucide-react";
+import { Coins, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Wallet, X, Filter, Lock, Repeat, CreditCard, ChevronDown, ChevronUp, CheckCircle, Clock, FileText, Download, Calendar, AlertCircle, MessageSquare } from "lucide-react";
 import { Modal } from "./Modal";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import jsPDF from "jspdf";
@@ -47,6 +47,11 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
     startDate: new Date().toISOString().split("T")[0],
     status: "pending",
   });
+
+  const [expandedSubId, setExpandedSubId] = useState<string | null>(null);
+  const [manualDueDateStr, setManualDueDateStr] = useState<string>("");
+  const [manualAmountNum, setManualAmountNum] = useState<number>(0);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -356,6 +361,290 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
     doc.save(`${fileNameSuffix}_${clientName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`);
   };
 
+  const getPeriodLabelFormatted = (dueDateString: string) => {
+    if (!dueDateString) return "Fecha sin especificar";
+    const parts = dueDateString.split("-");
+    if (parts.length < 2) return dueDateString;
+    const year = parts[0];
+    const monthIndex = parseInt(parts[1], 10) - 1;
+    const monthNames = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+    if (monthIndex >= 0 && monthIndex < 12) {
+      return `${monthNames[monthIndex]} de ${year}`;
+    }
+    return dueDateString;
+  };
+
+  const generateMonthlyPDF = async (sub: Receivable, inst: import("../types").Installment): Promise<jsPDF> => {
+    const doc = new jsPDF();
+    const client = clients.find(c => c.id === sub.clientId);
+    const clientName = client ? `${client.firstName} ${client.lastName}` : "Cliente Desconocido";
+    
+    // Add Logo
+    try {
+      const logoBase64 = await getBase64ImageFromUrl("/data/logo.png");
+      doc.addImage(logoBase64, "PNG", 25, 15, 18, 18);
+    } catch (error) {
+      console.warn("Could not load logo for PDF", error);
+    }
+
+    // Header
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.text("GeekyFix Workshop", 105, 25, { align: "center" });
+
+    // Add title
+    doc.setFontSize(22);
+    doc.setTextColor(37, 99, 235); // bg-blue-600
+    doc.text("Factura de Abono Mensual", 105, 45, { align: "center" });
+    
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, 55, 190, 55);
+    
+    // Add Client Info
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Cliente: ${clientName}`, 20, 65);
+    if (client?.email) doc.text(`Email: ${client.email}`, 20, 71);
+    if (client?.phone) doc.text(`Telefono: ${client.phone}`, 20, 77);
+    
+    doc.text(`Fecha de Emision: ${new Date().toLocaleDateString('es-AR')}`, 140, 65);
+    
+    const periodLabel = getPeriodLabelFormatted(inst.dueDate);
+
+    // Map status safely (no special emojis or unicode, to prevent pdf representation glitches)
+    let displayStatus = "PENDIENTE DE PAGO";
+    if (inst.status === 'paid' || inst.isPaid) {
+      displayStatus = "PAGADO";
+    } else if (inst.status === 'unpaid') {
+      displayStatus = "NO PAGADO";
+    }
+
+    // Details Table
+    const bodyRows = [
+      ["Suscripcion / Abono", sub.title],
+      ["Periodo Facturado", periodLabel],
+      ["Fecha de Vencimiento", inst.dueDate ? new Date(inst.dueDate + "T12:00:00").toLocaleDateString('es-AR') : 'Sin especificar'],
+      ["Monto del Abono", `$${inst.amount.toLocaleString('es-AR')}`],
+      ["Estado de Pago", displayStatus],
+    ];
+
+    if ((inst.status === 'paid' || inst.isPaid) && inst.paidDate) {
+      bodyRows.push(["Fecha de Cobro", new Date(inst.paidDate + "T12:00:00").toLocaleDateString('es-AR')]);
+    }
+
+    autoTable(doc, {
+      startY: 85,
+      head: [["Concepto", "Detalle de Venta"]],
+      body: bodyRows,
+      headStyles: { fillColor: [79, 70, 229] }, // indigo
+      theme: 'striped'
+    });
+
+    // Payment and transfer instructions below the table
+    const finalY = (doc as any).lastAutoTable?.finalY || 150;
+    
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(79, 70, 229); // Indigo-600
+    doc.text("Informacion de Pago & Transferencia:", 20, finalY + 15);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(55, 65, 81); // Slate
+    
+    doc.text("Paga tu abono mensual mediante transferencia bancaria o Mercado Pago:", 20, finalY + 22);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Alias de Transferencia: nacho802.mp", 20, finalY + 29);
+    
+    doc.setFont("helvetica", "normal");
+    doc.text("Importante: Una vez realizada la transferencia, envia el comprobante por WhatsApp.", 20, finalY + 36);
+
+    // Green whatsapp button/link text
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(16, 185, 129); // Emerald indicator
+    doc.text("-> Clic aqui para enviar comprobante por WhatsApp", 20, finalY + 44);
+    doc.link(20, finalY + 40, 95, 6, { url: "https://wa.me/543512179222" });
+    
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(156, 163, 175);
+    doc.text("Este es un comprobante de abono mensual generado por GeekyFix Workshop System.", 105, 280, { align: "center" });
+    doc.text("GeekyFix Workshop - Ignacio Abril", 105, 285, { align: "center" });
+    
+    return doc;
+  };
+
+  const handleDownloadMonthlyPDF = async (sub: Receivable, inst: import("../types").Installment) => {
+    try {
+      const doc = await generateMonthlyPDF(sub, inst);
+      const client = clients.find(c => c.id === sub.clientId);
+      const clientName = client ? `${client.firstName} ${client.lastName}` : "Cliente Desconocido";
+      const periodLabel = getPeriodLabelFormatted(inst.dueDate);
+      doc.save(`factura_${periodLabel.replace(/\s+/g, '_')}_${clientName.replace(/\s+/g, '_')}.pdf`);
+    } catch (e) {
+      console.error("Error generating/downloading monthly PDF:", e);
+      alert("Hubo un error al generar o descargar el PDF.");
+    }
+  };
+
+  const [sharingInstId, setSharingInstId] = useState<string | null>(null);
+
+  const handleShareMonthlyPDF = async (sub: Receivable, inst: import("../types").Installment) => {
+    const client = clients.find(c => c.id === sub.clientId);
+    if (!client || !client.whatsapp) {
+      alert("El cliente no tiene un número de WhatsApp configurado.");
+      return;
+    }
+    
+    setSharingInstId(inst.id);
+    try {
+      const doc = await generateMonthlyPDF(sub, inst);
+      const pdfBlob = doc.output('blob');
+      const { url } = await api.sharePdf(pdfBlob);
+      
+      const periodLabel = getPeriodLabelFormatted(inst.dueDate);
+      
+      let message = `Hola *${client.firstName}*, te comparto la factura del abono mensual para *${sub.title}*.\n\n`;
+      message += `📅 *Período:* ${periodLabel}\n`;
+      message += `💰 *Monto:* $${inst.amount.toLocaleString('es-AR')}\n\n`;
+      message += `📄 Puedes ver y descargar el documento en formato PDF en el siguiente enlace:\n${url}\n\n`;
+      message += `Muchas gracias, ¡quedamos a tu disposición!`;
+      
+      const encodedMessage = encodeURIComponent(message);
+      const whatsappUrl = `https://wa.me/${client.whatsapp.replace(/\D/g, '')}?text=${encodedMessage}`;
+      window.open(whatsappUrl, '_blank');
+    } catch (e) {
+      console.error("Error sharing PDF via WhatsApp", e);
+      alert("Hubo un error al generar o subir el PDF para WhatsApp. Por favor intenta de nuevo.");
+    } finally {
+      setSharingInstId(null);
+    }
+  };
+
+  const autoGeneratePeriods = async (sub: Receivable) => {
+    const start = new Date(sub.startDate + "T12:00:00");
+    const end = new Date();
+    // Add 3 months ahead to make sure upcoming invoices are available
+    end.setMonth(end.getMonth() + 3);
+    
+    const currentInstallments = sub.installments || [];
+    const generated = [...currentInstallments];
+    
+    let current = new Date(start);
+    let idx = 1;
+
+    // We generate up to the end date, month by month
+    while (current <= end) {
+      const dateString = current.toISOString().split('T')[0];
+      const monthYearKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
+      
+      const alreadyExists = currentInstallments.some(inst => inst.dueDate.startsWith(monthYearKey));
+      
+      if (!alreadyExists) {
+        generated.push({
+          id: Math.random().toString(36).substring(2, 9),
+          number: idx,
+          amount: sub.totalAmount,
+          dueDate: dateString,
+          isPaid: false
+        });
+      }
+      
+      current.setMonth(current.getMonth() + 1);
+      idx++;
+    }
+    
+    // Sort
+    generated.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+    const updated = {
+      ...sub,
+      installments: generated
+    };
+    
+    await api.updateReceivable(sub.id, updated);
+    fetchData();
+  };
+
+  const handleUpdateInstallment = async (sub: Receivable, instId: string, fields: Partial<import("../types").Installment>) => {
+    const updatedInstallments = (sub.installments || []).map(inst => {
+      if (inst.id === instId) {
+        const updatedItem = { ...inst, ...fields };
+        if (fields.isPaid === true || fields.status === 'paid') {
+          updatedItem.paidDate = updatedItem.paidDate || new Date().toISOString().split('T')[0];
+          updatedItem.isPaid = true;
+          updatedItem.status = 'paid';
+        } else if (fields.isPaid === false || fields.status === 'pending' || fields.status === 'unpaid') {
+          delete updatedItem.paidDate;
+          updatedItem.isPaid = false;
+          if (fields.status) {
+            updatedItem.status = fields.status;
+          } else {
+            updatedItem.status = fields.isPaid === false ? 'pending' : updatedItem.status;
+          }
+        }
+        return updatedItem;
+      }
+      return inst;
+    });
+
+    const updated = {
+      ...sub,
+      installments: updatedInstallments
+    };
+
+    await api.updateReceivable(sub.id, updated);
+    fetchData();
+  };
+
+  const handleDeleteInstallment = async (sub: Receivable, instId: string) => {
+    const updatedInstallments = (sub.installments || []).filter(inst => inst.id !== instId);
+    const updated = {
+      ...sub,
+      installments: updatedInstallments
+    };
+    await api.updateReceivable(sub.id, updated);
+    fetchData();
+  };
+
+  const handleAddManualInstallment = async (sub: Receivable) => {
+    if (!manualDueDateStr) {
+      alert("Por favor, selecciona una fecha de vencimiento.");
+      return;
+    }
+    if (manualAmountNum <= 0) {
+      alert("Por favor, define un monto mayor que 0.");
+      return;
+    }
+
+    const newInst = {
+      id: Math.random().toString(36).substring(2, 9),
+      number: (sub.installments?.length || 0) + 1,
+      amount: manualAmountNum,
+      dueDate: manualDueDateStr,
+      isPaid: false
+    };
+
+    const updatedInstallments = [...(sub.installments || []), newInst];
+    updatedInstallments.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+    const updated = {
+      ...sub,
+      installments: updatedInstallments
+    };
+
+    await api.updateReceivable(sub.id, updated);
+    setManualDueDateStr("");
+    setManualAmountNum(0);
+    fetchData();
+  };
+
   return (
     <div className="space-y-6 flex flex-col h-full relative">
       {/* Header & Tabs */}
@@ -643,31 +932,263 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
             ) : (
               <div className="grid gap-3 p-4">
                 {receivables.filter(r => r.type === 'subscription').map(sub => (
-                   <div key={sub.id} className="bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className={`w-2 h-2 rounded-full ${sub.status === 'active' ? 'bg-green-500' : 'bg-red-500'}`} />
-                          <h4 className="font-bold text-gray-900 dark:text-gray-100">{sub.title}</h4>
-                          <span className="text-xs px-2 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded font-semibold uppercase tracking-wider">
-                            {sub.period === 'monthly' ? 'Mensual' : sub.period === 'weekly' ? 'Semanal' : 'Anual'}
-                          </span>
+                    <div key={sub.id} className="bg-gray-50 dark:bg-gray-900 border border-gray-150 dark:border-gray-800 rounded-2xl flex flex-col overflow-hidden shadow-sm">
+                       <div className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100 dark:border-gray-800">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className={`w-2.5 h-2.5 rounded-full ${sub.status === 'active' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                              <h4 className="font-bold text-gray-900 dark:text-gray-100 text-base">{sub.title}</h4>
+                              <span className="text-[10px] px-2 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded font-bold uppercase tracking-wider">
+                                {sub.period === 'monthly' ? 'Mensual' : sub.period === 'weekly' ? 'Semanal' : 'Anual'}
+                              </span>
+                            </div>
+                            <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">
+                              Cliente: <span className="font-normal">{clients.find(c => c.id === sub.clientId) ? `${clients.find(c => c.id === sub.clientId)?.firstName} ${clients.find(c => c.id === sub.clientId)?.lastName}` : 'Desconocido'}</span>
+                            </p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
+                              <Calendar size={12} /> Inicio: {sub.startDate ? new Date(sub.startDate + "T12:00:00").toLocaleDateString('es-AR') : 'No especificada'}
+                            </p>
+                          </div>
+                          
+                          <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                            <div className="text-right">
+                              <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider">Monto Abono</p>
+                              <p className="text-lg font-extrabold text-blue-600 dark:text-indigo-400">${sub.totalAmount.toLocaleString('es-AR')}</p>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                               <button 
+                                 onClick={() => setExpandedSubId(expandedSubId === sub.id ? null : sub.id)}
+                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                                   expandedSubId === sub.id 
+                                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20' 
+                                     : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-705 hover:bg-gray-50 dark:hover:bg-gray-750'
+                                 }`}
+                                 title="Ver facturas mensuales y estado"
+                               >
+                                 <Repeat size={14} /> 
+                                 Historial ({sub.installments?.length || 0})
+                                 {expandedSubId === sub.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                               </button>
+                               
+                               <button onClick={() => openEditRecModal(sub)} className="px-2.5 py-1.5 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg text-xs font-bold transition-colors">Editar</button>
+                               <button onClick={() => handleDeleteRec(sub.id)} className="p-1.5 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 rounded-lg transition-colors"><Trash2 size={16}/></button>
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Cliente: {clients.find(c => c.id === sub.clientId)?.firstName} {clients.find(c => c.id === sub.clientId)?.lastName || 'Desconocido'}</p>
-                      </div>
-                      <div className="flex items-center gap-4 w-full sm:w-auto">
-                        <div className="text-right flex-1 sm:flex-none">
-                          <p className="text-xs text-gray-500 uppercase font-semibold">Valor</p>
-                          <p className="text-xl font-bold text-purple-600 dark:text-purple-400">${sub.totalAmount.toLocaleString('es-AR')}</p>
-                        </div>
-                        <div className="flex gap-2">
-                           <button onClick={() => handleDownloadPDF(sub)} className="p-1.5 bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/50 dark:text-purple-300 rounded block transition-colors" title="Descargar PDF">
-                             <FileText size={16} />
-                           </button>
-                           <button onClick={() => openEditRecModal(sub)} className="px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded block text-sm font-semibold transition-colors">Editar</button>
-                           <button onClick={() => handleDeleteRec(sub.id)} className="px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/50 dark:text-red-300 rounded block text-sm font-semibold transition-colors"><Trash2 size={16}/></button>
-                        </div>
-                      </div>
-                   </div>
+                                     {/* Collapsible Billing Periods Area */}
+                       {expandedSubId === sub.id && (
+                          <div className="bg-white dark:bg-gray-950 p-4 border-t border-gray-100 dark:border-gray-800 space-y-4">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-3 rounded-xl">
+                              <div>
+                                <h5 className="font-bold text-sm text-gray-900 dark:text-white">Control de Facturación e Invoices</h5>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Genera las facturas o cuotas mes a mes para este abono, regístralas de forma simple y guarda el archivo PDF.</p>
+                              </div>
+                              <div className="flex gap-2 w-full md:w-auto shrink-0">
+                                <button 
+                                  onClick={() => autoGeneratePeriods(sub)}
+                                  className="flex-1 md:flex-none px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 border border-indigo-100 dark:border-indigo-900 transition-all"
+                                >
+                                  <Repeat size={12} className="animate-spin-slow" /> Autogenerar Períodos
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Información para el Pago */}
+                            <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-xl border border-blue-100 dark:border-blue-900/30 text-xs flex justify-between items-center gap-3">
+                              <div>
+                                <p className="font-bold text-indigo-900 dark:text-indigo-300">Datos para Transferencias / Abonos (Incluidos en el PDF):</p>
+                                <p className="text-gray-700 dark:text-gray-300 mt-1 font-medium">
+                                  Alias de Transferencia: <span className="font-mono bg-white dark:bg-gray-800 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 font-bold text-gray-900 dark:text-white select-all">nacho802.mp</span>
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Manual rapid-add row */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border border-gray-100 dark:border-gray-800/80 p-3 rounded-xl bg-gray-50/50 dark:bg-gray-900/30 text-xs">
+                              <div>
+                                <label className="block font-semibold text-gray-600 dark:text-gray-400 mb-1">Nueva Fecha Vencimiento</label>
+                                <input 
+                                  type="date" 
+                                  className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                  value={manualDueDateStr}
+                                  onChange={e => setManualDueDateStr(e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <label className="block font-semibold text-gray-600 dark:text-gray-400 mb-1">Monto del Período ($)</label>
+                                <input 
+                                  type="number" 
+                                  className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-bold"
+                                  value={manualAmountNum || ""}
+                                  placeholder={String(sub.totalAmount)}
+                                  onChange={e => setManualAmountNum(parseFloat(e.target.value) || 0)}
+                                />
+                              </div>
+                              <div className="flex items-end">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddManualInstallment(sub)}
+                                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 shadow-sm transition-colors"
+                                >
+                                  <Plus size={14} /> Añadir Período
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Monthly Table / List */}
+                            {(!sub.installments || sub.installments.length === 0) ? (
+                              <div className="text-center py-6 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                                <p className="text-xs text-gray-500 font-semibold mb-1">No hay períodos de facturación generados aún</p>
+                                <p className="text-[11px] text-gray-400 mb-2">Haz clic abajo para autogenerar períodos desde la fecha de inicio del servicio</p>
+                                <button 
+                                  onClick={() => autoGeneratePeriods(sub)}
+                                  className="px-3 py-1 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-750 text-indigo-600 dark:text-indigo-400 border border-gray-250 dark:border-gray-750 rounded-lg text-xs font-bold transition-all"
+                                >
+                                  Generar períodos ahora
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
+                                <table className="w-full text-left border-collapse text-xs">
+                                  <thead>
+                                    <tr className="bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800 uppercase font-bold text-[10px] tracking-wider">
+                                      <th className="p-3">Período / Mes</th>
+                                      <th className="p-3">Vencimiento</th>
+                                      <th className="p-3">Monto</th>
+                                      <th className="p-3 text-center">Estado de Pago</th>
+                                      <th className="p-3 text-right">Acciones</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                    {sub.installments.map(inst => {
+                                      const label = getPeriodLabelFormatted(inst.dueDate);
+                                      const currentStatus = inst.status || (inst.isPaid ? 'paid' : 'pending');
+                                      return (
+                                        <tr key={inst.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/40 transition-colors">
+                                          <td className="p-3 font-bold text-gray-900 dark:text-white">
+                                            {label}
+                                          </td>
+                                          <td className="p-3">
+                                            <input 
+                                              type="date"
+                                              value={inst.dueDate}
+                                              onChange={(e) => handleUpdateInstallment(sub, inst.id, { dueDate: e.target.value })}
+                                              className="bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1.5 py-0.5 border-none outline-none focus:ring-1 focus:ring-indigo-500 font-medium text-gray-700 dark:text-gray-300"
+                                            />
+                                          </td>
+                                          <td className="p-3">
+                                            <input 
+                                              type="number"
+                                              value={inst.amount}
+                                              onChange={(e) => handleUpdateInstallment(sub, inst.id, { amount: parseFloat(e.target.value) || 0 })}
+                                              className="bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1.5 py-0.5 w-20 border-none outline-none focus:ring-1 focus:ring-indigo-500 font-semibold text-blue-600 dark:text-indigo-400"
+                                            />
+                                          </td>
+                                          <td className="p-3 text-center col-span-1">
+                                            <button
+                                              onClick={() => {
+                                                let nextStatus: 'paid' | 'pending' | 'unpaid' = 'pending';
+                                                if (currentStatus === 'pending') {
+                                                  nextStatus = 'paid';
+                                                } else if (currentStatus === 'paid') {
+                                                  nextStatus = 'unpaid';
+                                                } else {
+                                                  nextStatus = 'pending';
+                                                }
+                                                handleUpdateInstallment(sub, inst.id, { status: nextStatus, isPaid: nextStatus === 'paid' });
+                                              }}
+                                              title="Haz clic para alternar: Pendiente -> Pagado -> No Pagado"
+                                              className={`mx-auto px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-all ${
+                                                currentStatus === 'paid' 
+                                                  ? 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
+                                                  : currentStatus === 'unpaid'
+                                                  ? 'bg-red-50 dark:bg-red-955/35 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
+                                                  : 'bg-amber-50 dark:bg-amber-955/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                                              }`}
+                                            >
+                                              {currentStatus === 'paid' ? (
+                                                <>
+                                                  <CheckCircle size={11} />
+                                                  Pagado
+                                                </>
+                                              ) : currentStatus === 'unpaid' ? (
+                                                <>
+                                                  <AlertCircle size={11} />
+                                                  No Pagado
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <Clock size={11} />
+                                                  Pendiente
+                                                </>
+                                              )}
+                                            </button>
+                                          </td>
+                                          <td className="p-3 text-right">
+                                            <div className="flex items-center justify-end gap-1.5">
+                                              <button
+                                                onClick={() => handleDownloadMonthlyPDF(sub, inst)}
+                                                className="p-1 px-2.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800 flex items-center gap-1 font-bold text-[10px] uppercase transition-colors"
+                                                title="Descargar PDF de este período"
+                                              >
+                                                <Download size={11} />
+                                                PDF
+                                              </button>
+                                              <button
+                                                onClick={() => handleShareMonthlyPDF(sub, inst)}
+                                                disabled={sharingInstId === inst.id}
+                                                className={`p-1 px-2.5 rounded-lg border border-transparent flex items-center gap-1 font-bold text-[10px] uppercase transition-colors ${
+                                                  sharingInstId === inst.id
+                                                    ? "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300 cursor-wait"
+                                                    : "bg-green-50 text-emerald-700 hover:bg-green-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50 hover:border-emerald-200 dark:hover:border-emerald-850"
+                                                }`}
+                                                title="Enviar factura por WhatsApp con link de descarga"
+                                              >
+                                                <MessageSquare size={11} />
+                                                {sharingInstId === inst.id ? "Enviando..." : "WhatsApp"}
+                                              </button>
+                                              {deleteConfirmId === inst.id ? (
+                                                <div className="flex items-center gap-1">
+                                                  <button
+                                                    onClick={() => {
+                                                      handleDeleteInstallment(sub, inst.id);
+                                                      setDeleteConfirmId(null);
+                                                    }}
+                                                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-[10px] uppercase transition-colors shrink-0"
+                                                    title="Confirmar eliminación"
+                                                  >
+                                                    ¿Confirmar?
+                                                  </button>
+                                                  <button
+                                                    onClick={() => setDeleteConfirmId(null)}
+                                                    className="p-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-lg transition-colors shrink-0"
+                                                    title="Cancelar"
+                                                  >
+                                                    <X size={11} />
+                                                  </button>
+                                                </div>
+                                              ) : (
+                                                <button
+                                                  onClick={() => setDeleteConfirmId(inst.id)}
+                                                  className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-955/30 rounded-lg transition-colors shrink-0"
+                                                  title="Eliminar período"
+                                                >
+                                                  <Trash2 size={13} />
+                                                </button>
+                                              )}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                       )}
+                    </div>
                 ))}
               </div>
             )}
