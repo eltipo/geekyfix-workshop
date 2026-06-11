@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { api } from "../api";
 import { Transaction, Project, Budget, ServiceTask, Device, Receivable, Client } from "../types";
-import { Coins, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Wallet, X, Filter, Lock, Repeat, CreditCard, ChevronDown, ChevronUp, CheckCircle, Clock, FileText, Download, Calendar, AlertCircle, MessageSquare } from "lucide-react";
+import { Coins, Plus, Trash2, Edit2, TrendingUp, TrendingDown, Wallet, X, Filter, Lock, Repeat, CreditCard, ChevronDown, ChevronUp, CheckCircle, Clock, FileText, Download, Calendar, AlertCircle, MessageSquare, Archive } from "lucide-react";
 import { Modal } from "./Modal";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import jsPDF from "jspdf";
@@ -9,7 +9,7 @@ import autoTable from "jspdf-autotable";
 import { getBase64ImageFromUrl } from "../lib/utils";
 
 export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
-  const [activeTab, setActiveTab] = useState<"cashflow" | "receivables" | "subscriptions">("cashflow");
+  const [activeTab, setActiveTab] = useState<"cashflow" | "receivables" | "subscriptions" | "archived">("cashflow");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -678,6 +678,12 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
           >
             <Repeat size={18} /> Suscripciones
           </button>
+          <button 
+            onClick={() => setActiveTab('archived')}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${activeTab === 'archived' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
+          >
+            <Archive size={18} /> Cobrados / Archivados
+          </button>
         </div>
       </div>
 
@@ -874,11 +880,11 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
             </div>
           </div>
           <div className="p-0">
-            {receivables.filter(r => r.type !== 'subscription').length === 0 ? (
-              <p className="p-8 text-center text-gray-500">No hay cuentas por cobrar registradas.</p>
+            {receivables.filter(r => r.type !== 'subscription' && r.paidAmount < r.totalAmount && r.status !== 'completed').length === 0 ? (
+              <p className="p-8 text-center text-gray-500">No hay cuentas pendientes de cobro registradas.</p>
             ) : (
               <div className="grid gap-3 p-4">
-                {receivables.filter(r => r.type !== 'subscription').map(rec => (
+                {receivables.filter(r => r.type !== 'subscription' && r.paidAmount < r.totalAmount && r.status !== 'completed').map(rec => (
                    <div key={rec.id} className="bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
@@ -1189,6 +1195,56 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
                           </div>
                        )}
                     </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'archived' && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden mb-[80px]">
+          <div className="flex justify-between items-center p-4 border-b border-gray-100 dark:border-gray-700">
+            <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <Archive size={18} className="text-green-500" />
+              Historial de Cobros Archivados / Pagados
+            </h3>
+          </div>
+          <div className="p-0">
+            {receivables.filter(r => r.type !== 'subscription' && (r.paidAmount >= r.totalAmount || r.status === 'completed')).length === 0 ? (
+              <p className="p-8 text-center text-gray-500">No hay cobros archivados o pagados.</p>
+            ) : (
+              <div className="grid gap-3 p-4">
+                {receivables.filter(r => r.type !== 'subscription' && (r.paidAmount >= r.totalAmount || r.status === 'completed')).map(rec => (
+                   <div key={rec.id} className="bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <CheckCircle size={16} className="text-green-500 font-bold" />
+                          <h4 className="font-bold text-gray-900 dark:text-gray-100">{rec.title}</h4>
+                          <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded font-semibold">
+                            {rec.type === 'one-time' ? 'Un solo pago' : 'Cuotas'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Cliente: {clients.find(c => c.id === rec.clientId)?.firstName} {clients.find(c => c.id === rec.clientId)?.lastName || 'Desconocido'} | Inicio: {new Date(rec.startDate).toLocaleDateString('es-AR')}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500 uppercase font-semibold">Cobrado / Total</p>
+                          <p className="text-lg font-bold text-gray-900 dark:text-white">
+                            <span className="text-green-600 font-extrabold">${rec.paidAmount.toLocaleString('es-AR')}</span> 
+                            <span className="text-gray-400 mx-1">/</span> 
+                            ${rec.totalAmount.toLocaleString('es-AR')}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                           <button onClick={() => handleDownloadPDF(rec)} className="p-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded block transition-colors" title="Descargar PDF">
+                             <FileText size={16} />
+                           </button>
+                           <button onClick={() => openEditRecModal(rec)} className="px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded block text-sm font-semibold transition-colors">Editar</button>
+                           <button onClick={() => handleDeleteRec(rec.id)} className="px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/50 dark:text-red-300 rounded block text-sm font-semibold transition-colors"><Trash2 size={16}/></button>
+                        </div>
+                      </div>
+                   </div>
                 ))}
               </div>
             )}

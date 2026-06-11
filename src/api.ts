@@ -181,12 +181,17 @@ export const api = {
     });
     if (!res.ok) {
       const text = await res.text();
+      let parsedError = "";
       try {
         const json = JSON.parse(text);
-        throw new Error(json.error || `Error (${res.status})`);
+        parsedError = json.error;
       } catch (e) {
-        throw new Error(`Error del servidor (${res.status}): ${text.substring(0, 100)}`);
+        // Fallback if not JSON
       }
+      if (parsedError) {
+        throw new Error(parsedError);
+      }
+      throw new Error(`Error del servidor (${res.status}): ${text.substring(0, 100)}`);
     }
     return res.json();
   },
@@ -480,6 +485,64 @@ export const api = {
     });
     if (!res.ok) {
       throw new Error(`Failed to share PDF: ${res.statusText}`);
+    }
+    return res.json();
+  },
+  getGoogleStatus: async (): Promise<{ connected: boolean; email?: string; name?: string; authenticatedAt?: string; isSandbox?: boolean }> => {
+    const res = await fetch("/api/google/status");
+    return res.json();
+  },
+  getGoogleAuthUrl: async (): Promise<{ url: string }> => {
+    const res = await fetch("/api/google/auth-url");
+    return res.json();
+  },
+  disconnectGoogle: async (): Promise<{ success: boolean }> => {
+    const res = await fetch("/api/google/disconnect", {
+      method: "POST"
+    });
+    return res.json();
+  },
+  createGoogleCalendarEvent: async (body: { title: string; description: string; date: string; time?: string; durationMinutes?: number; location?: string }): Promise<{ success: boolean; eventId?: string; simulated?: boolean; message?: string }> => {
+    const res = await fetch("/api/google/calendar/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Error al crear evento en Google Calendar");
+    }
+    return res.json();
+  },
+  createGoogleTask: async (body: { title: string; notes?: string; dueDate?: string }): Promise<{ success: boolean; taskId?: string; simulated?: boolean; message?: string }> => {
+    const res = await fetch("/api/google/tasks/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Error al crear tarea en Google Tasks");
+    }
+    return res.json();
+  },
+  exportToGoogleSheets: async (dataType: "all" | "clients" | "projects" | "budgets" | "finance"): Promise<{ success: boolean; url: string; spreadsheetId?: string; simulated?: boolean; message?: string }> => {
+    const res = await fetch("/api/google/sheets/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataType })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Error al exportar a Google Sheets");
+    }
+    return res.json();
+  },
+  getGoogleCalendarEvents: async (): Promise<{ connected: boolean; isSandbox?: boolean; events: any[] }> => {
+    const res = await fetch("/api/google/calendar/events");
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Error al obtener eventos de Google Calendar");
     }
     return res.json();
   },

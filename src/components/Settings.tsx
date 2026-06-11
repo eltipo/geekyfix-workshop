@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { ServiceType } from "../types";
-import { Download, Upload, ShieldCheck, AlertTriangle, RefreshCw, Database, HardDrive, History, Plus, Trash2, Edit2, Save, X, Briefcase, Info, ExternalLink, ChevronRight, Lock, Fingerprint } from "lucide-react";
+import { Download, Upload, ShieldCheck, AlertTriangle, RefreshCw, Database, HardDrive, History, Plus, Trash2, Edit2, Save, X, Briefcase, Info, ExternalLink, ChevronRight, Lock, Fingerprint, Globe, FileSpreadsheet } from "lucide-react";
 import { Modal } from "./Modal";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 
@@ -29,9 +29,93 @@ export function Settings() {
     { version: "v1.2.0", date: "2026-04-05", changes: ["Cajón de aplicaciones (App Drawer)", "Modo oscuro mejorado"] }
   ];
 
+  const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; email?: string; name?: string; authenticatedAt?: string; isSandbox?: boolean } | null>(null);
+  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
+  const [exportType, setExportType] = useState<'all' | 'clients' | 'projects' | 'budgets' | 'finance'>('all');
+  const [isExportingSheets, setIsExportingSheets] = useState(false);
+  const [exportedSheetsUrl, setExportedSheetsUrl] = useState<string | null>(null);
+
+  const handleExportToSheets = async () => {
+    setIsExportingSheets(true);
+    setExportedSheetsUrl(null);
+    try {
+      const res = await api.exportToGoogleSheets(exportType);
+      if (res.success && res.url) {
+        setExportedSheetsUrl(res.url);
+        setMessage({ type: 'success', text: `¡Exportación completada! Google Spreadsheet creado con éxito en tu Google Drive.` });
+      } else {
+        setMessage({ type: 'error', text: res.message || "No se pudo realizar la exportación." });
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ type: 'error', text: `Error al exportar: ${err.message || 'Error desconocido'}` });
+    } finally {
+      setIsExportingSheets(false);
+    }
+  };
+
+  const fetchGoogleStatus = async () => {
+    try {
+      const status = await api.getGoogleStatus();
+      setGoogleStatus(status);
+    } catch (e) {
+      console.error("Error fetching google status", e);
+    }
+  };
+
   useEffect(() => {
     api.getServiceTypes().then(setServiceTypes);
+    fetchGoogleStatus();
   }, []);
+
+  useEffect(() => {
+    const handleGoogleMessage = (event: MessageEvent) => {
+      const origin = event.origin;
+      if (!origin.endsWith('.run.app') && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+        return;
+      }
+      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+        setMessage({ type: 'success', text: "¡Cuenta de Google conectada exitosamente!" });
+        fetchGoogleStatus();
+      }
+    };
+    window.addEventListener('message', handleGoogleMessage);
+    return () => window.removeEventListener('message', handleGoogleMessage);
+  }, []);
+
+  const handleConnectGoogle = async () => {
+    setIsConnectingGoogle(true);
+    try {
+      const { url } = await api.getGoogleAuthUrl();
+      const authWindow = window.open(
+        url,
+        'google_oauth_popup',
+        'width=600,height=700'
+      );
+      if (!authWindow) {
+        alert('Por favor habilita las ventanas emergentes (popups) en tu navegador para realizar la autenticación de Google.');
+      }
+    } catch (error: any) {
+      console.error("Failed to connect Google", error);
+      setMessage({ type: 'error', text: "Error al iniciar la autenticación de Google" });
+    } finally {
+      setIsConnectingGoogle(false);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    if (!confirm("¿Estás seguro de que deseas desvincular tu cuenta de Google?")) return;
+    try {
+      const res = await api.disconnectGoogle();
+      if (res.success) {
+        setMessage({ type: 'success', text: "Cuenta de Google desvinculada exitosamente" });
+        fetchGoogleStatus();
+      }
+    } catch (error) {
+      console.error("Failed to disconnect Google", error);
+      setMessage({ type: 'error', text: "Falla al desvincular la cuenta de Google" });
+    }
+  };
 
   const handleAddService = async () => {
     if (!newService.name) return;
@@ -282,12 +366,12 @@ export function Settings() {
                           <h4 className="font-bold text-gray-900 dark:text-gray-100 text-sm">{service.name}</h4>
                           <p className="text-purple-600 dark:text-purple-400 font-black text-lg mt-1">${service.defaultPrice.toLocaleString()}</p>
                         </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => setEditingServiceId(service.id)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg">
-                            <Edit2 size={14} />
+                        <div className="flex gap-1 opacity-100">
+                          <button onClick={() => setEditingServiceId(service.id)} className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:text-gray-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors">
+                            <Edit2 size={16} />
                           </button>
-                          <button onClick={() => handleDeleteService(service.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
-                            <Trash2 size={14} />
+                          <button onClick={() => handleDeleteService(service.id)} className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-gray-400 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </div>
@@ -335,6 +419,150 @@ export function Settings() {
         >
           Configurar Biometría
         </button>
+      </div>
+
+      {/* Google Authentication Integration Card */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm transition-all">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-gradient-to-br from-red-100 to-amber-100 dark:from-red-950/30 dark:to-amber-950/30 text-red-600 dark:text-amber-400 rounded-xl shrink-0">
+              <Globe size={24} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Autenticación / Vinculación con Google</h3>
+                {googleStatus?.connected ? (
+                  <span className={`px-2 py-0.5 text-[10px] uppercase font-extrabold rounded-md shadow-sm ${
+                    googleStatus.isSandbox 
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300' 
+                      : 'bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300'
+                  }`}>
+                    {googleStatus.isSandbox ? "Sandbox / Prueba" : "Vinculado"}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 text-[10px] uppercase font-extrabold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-md">
+                    No Vinculado
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Valida y autoriza tu cuenta con Google para que la IA disponga de permisos para operaciones del sistema
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex gap-2 w-full sm:w-auto shrink-0">
+            {googleStatus?.connected ? (
+              <>
+                <button 
+                  onClick={handleConnectGoogle}
+                  disabled={isConnectingGoogle}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 font-bold rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all active:scale-95"
+                >
+                  <RefreshCw size={16} className={isConnectingGoogle ? "animate-spin" : ""} />
+                  Volver a Autenticar
+                </button>
+                <button 
+                  onClick={handleDisconnectGoogle}
+                  className="px-4 py-3 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 font-bold rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-all active:scale-95"
+                  title="Desvincular cuenta"
+                >
+                  Desvincular
+                </button>
+              </>
+            ) : (
+              <button 
+                onClick={handleConnectGoogle}
+                disabled={isConnectingGoogle}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-red-600 to-amber-600 text-white font-extrabold rounded-xl hover:from-red-700 hover:to-amber-700 transition-all active:scale-95 shadow-sm"
+              >
+                <Globe size={18} className={isConnectingGoogle ? "animate-spin" : ""} />
+                Vincular Cuenta Google
+              </button>
+            )}
+          </div>
+        </div>
+
+        {googleStatus?.connected && (
+          <>
+            <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-800 text-xs text-gray-600 dark:text-gray-300 flex flex-col sm:flex-row justify-between gap-2">
+              <div>
+                <span className="font-bold text-gray-900 dark:text-gray-200 block sm:inline">Usuario:</span> {googleStatus.name || "N/A"}{" "}
+                <span className="text-gray-400 mx-1 hidden sm:inline">|</span>{" "}
+                <span className="font-bold text-gray-900 dark:text-gray-200 block sm:inline">Correo electrónico:</span> {googleStatus.email}
+              </div>
+              {googleStatus.authenticatedAt && (
+                <div>
+                  <span className="font-bold text-gray-900 dark:text-gray-200">Vinculado el:</span>{" "}
+                  {new Date(googleStatus.authenticatedAt).toLocaleString('es-AR')}
+                </div>
+              )}
+            </div>
+
+            {/* Google Sheets Export Sub-section */}
+            <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700/80">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2.5 bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400 rounded-xl">
+                  <FileSpreadsheet size={20} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-extrabold text-gray-900 dark:text-gray-100">Exportador a Google Sheets</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Genera hojas de cálculo en tiempo real en tu Google Drive</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 items-end">
+                <div className="flex-1 w-full">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">Datos a exportar</label>
+                  <select
+                    value={exportType}
+                    onChange={(e: any) => setExportType(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-850 text-sm text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                  >
+                    <option value="all">Todo el Sistema (Múltiples Pestañas)</option>
+                    <option value="clients">Clientes Registrados</option>
+                    <option value="projects">Proyectos y Trabajos</option>
+                    <option value="budgets">Presupuestos Generados</option>
+                    <option value="finance">Flujo de Caja e Ingresos</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={handleExportToSheets}
+                    disabled={isExportingSheets}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold text-sm rounded-xl transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {isExportingSheets ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <Download size={16} />
+                    )}
+                    {isExportingSheets ? "Exportando..." : "Exportar a Google Sheets"}
+                  </button>
+
+                  {exportedSheetsUrl && (
+                    <a
+                      href={exportedSheetsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all active:scale-95"
+                    >
+                      <ExternalLink size={16} />
+                      Abrir Planilla
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl">
+                <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
+                  💡 <strong>Información sobre la integración activa:</strong> Una vez autenticado, también dispones de botones directos de sincronización con <strong>Google Calendar</strong> (para planificar alarmas) y <strong>Google Tasks</strong> (para organizar tareas pendientes) dentro del detalle de cada <strong>Proyecto</strong> y de cada <strong>Tarea Técnica</strong>.
+                </p>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

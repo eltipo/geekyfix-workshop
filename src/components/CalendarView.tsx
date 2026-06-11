@@ -19,6 +19,10 @@ export function CalendarView({
   const [tickets, setTickets] = useState<{ device: Device, ticket: Ticket }[]>([]);
   const [selectedDay, setSelectedDay] = useState<{ day: number, events: any } | null>(null);
 
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleEvents, setGoogleEvents] = useState<any[]>([]);
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
+
   useEffect(() => {
     const loadData = async () => {
       const [devs, projs] = await Promise.all([api.getDevices(), api.getProjects()]);
@@ -36,6 +40,18 @@ export function CalendarView({
         }
       });
       setTickets(allTickets);
+
+      // Load Google Calendar events
+      try {
+        setLoadingGoogle(true);
+        const gRes = await api.getGoogleCalendarEvents();
+        setGoogleConnected(gRes.connected);
+        setGoogleEvents(gRes.events || []);
+      } catch (err) {
+        console.error("No se pudieron cargar eventos de Google Calendar", err);
+      } finally {
+        setLoadingGoogle(false);
+      }
     };
     loadData();
   }, []);
@@ -75,16 +91,24 @@ export function CalendarView({
   const getEventsForDay = (day: number) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
+    // Filter events from the new secondary GeekyFix calendar
+    const googleEventsForDay = googleEvents.filter((ev: any) => {
+      const startVal = ev.start?.dateTime || ev.start?.date;
+      return startVal && startVal.startsWith(dateStr);
+    });
+
     if (appMode === 'project') {
       return {
         projects: projects.filter(p => p.startDate && p.startDate.startsWith(dateStr)),
-        deadlines: projects.filter(p => p.deadline && p.deadline.startsWith(dateStr))
+        deadlines: projects.filter(p => p.deadline && p.deadline.startsWith(dateStr)),
+        google: googleEventsForDay
       };
     }
 
     return {
       entered: devices.filter(d => d.entryDate && d.entryDate.startsWith(dateStr)),
-      completed: tickets.filter(t => t.ticket.date.startsWith(dateStr))
+      completed: tickets.filter(t => t.ticket.date.startsWith(dateStr)),
+      google: googleEventsForDay
     };
   };
 
@@ -162,6 +186,13 @@ export function CalendarView({
                         </div>
                       )}
                     </>
+                  )}
+
+                  {events.google?.length > 0 && (
+                    <div className="text-[10px] flex items-center gap-1 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/10 px-1.5 py-0.5 rounded border border-emerald-100 dark:border-emerald-950/20 font-bold">
+                      <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                      <span className="truncate">{events.google.length} GeekyFix vCal</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -305,6 +336,38 @@ export function CalendarView({
                   )}
                 </div>
               </>
+            )}
+
+            {/* Google Calendar: GeekyFix Events Section */}
+            {selectedDay.events.google?.length > 0 && (
+              <div className="border-t border-gray-100 dark:border-gray-700/80 pt-4">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+                  <span className="flex h-3 w-3 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                  Google Calendar: GeekyFix ({selectedDay.events.google.length})
+                </h3>
+                <ul className="space-y-2">
+                  {selectedDay.events.google.map((ev: any) => (
+                    <li 
+                      key={ev.id} 
+                      className="p-3 bg-emerald-50/20 dark:bg-emerald-950/10 rounded-lg border border-emerald-100/60 dark:border-emerald-900/25"
+                    >
+                      <div className="font-semibold text-emerald-800 dark:text-emerald-350">{ev.summary}</div>
+                      {ev.description && (
+                        <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 whitespace-pre-line">{ev.description}</div>
+                      )}
+                      {(ev.start?.dateTime || ev.start?.date) && (
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5">
+                          {ev.start?.dateTime ? (
+                            <>Hora: {new Date(ev.start.dateTime).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</>
+                          ) : (
+                            <>Todo el día</>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
         )}

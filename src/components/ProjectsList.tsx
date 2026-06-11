@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { Project, Client, ProjectDoc, Budget } from "../types";
-import { Plus, Folder, FileText, Image as ImageIcon, Link as LinkIcon, Trash2, Edit2, ExternalLink, Calendar, User, Upload, X, CheckCircle2, Clock, AlertCircle, Camera, Maximize2, ReceiptText, ChevronRight, FileDown, History, List } from "lucide-react";
+import { Plus, Folder, FileText, Image as ImageIcon, Link as LinkIcon, Trash2, Edit2, ExternalLink, Calendar, User, Upload, X, CheckCircle2, Clock, AlertCircle, Camera, Maximize2, ReceiptText, ChevronRight, FileDown, History, List, CheckSquare } from "lucide-react";
 import { Modal } from "./Modal";
 import { ServiceTasksList } from "./ServiceTasksList";
 import jsPDF from "jspdf";
@@ -392,6 +392,54 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
 
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleSyncLoading, setGoogleSyncLoading] = useState<'calendar' | 'task' | null>(null);
+  const [statusMessage, setStatusMessage] = useState("");
+
+  useEffect(() => {
+    api.getGoogleStatus()
+      .then(res => {
+        setGoogleConnected(res?.connected || false);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSyncToGoogleCalendar = async () => {
+    setGoogleSyncLoading('calendar');
+    setStatusMessage("Agendando proyecto en Google Calendar...");
+    try {
+      await api.createGoogleCalendarEvent({
+        title: `📁 Proyecto: ${project.name}`,
+        description: `Proyecto Técnico - GeekyFix\nCliente: ${client ? `${client.firstName} ${client.lastName}` : "No asignado"}\nFecha de inicio: ${project.startDate}\nDetalles: ${project.description || "Sin descripción"}`,
+        date: project.startDate
+      });
+      setStatusMessage("✅ ¡Proyecto agendado con éxito!");
+    } catch (err: any) {
+      console.error(err);
+      setStatusMessage(`❌ Error: ${err.message || "No se pudo agendar"}`);
+    } finally {
+      setGoogleSyncLoading(null);
+    }
+  };
+
+  const handleSyncToGoogleTasks = async () => {
+    setGoogleSyncLoading('task');
+    setStatusMessage("Creando tarea del proyecto en Google Tasks...");
+    try {
+      await api.createGoogleTask({
+        title: `Iniciar proyecto: ${project.name}`,
+        notes: `Cliente: ${client ? `${client.firstName} ${client.lastName}` : "No asignado"}\nFecha de inicio: ${project.startDate}\nDetalles:\n${project.description || "Sin descripción"}`,
+        dueDate: project.startDate
+      });
+      setStatusMessage("✅ ¡Tarea agregada a tus tareas de Google Tasks!");
+    } catch (err: any) {
+      console.error(err);
+      setStatusMessage(`❌ Error: ${err.message || "No se pudo sincronizar"}`);
+    } finally {
+      setGoogleSyncLoading(null);
+    }
+  };
+
   const [isAddingField, setIsAddingField] = useState(false);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [fieldKey, setFieldKey] = useState("");
@@ -749,6 +797,42 @@ function ProjectDetail({ project, client, budgets, onClose, onUploadDocs, onUpda
             <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
               <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{project.description}</p>
             </div>
+          )}
+          
+          {googleConnected && (
+            <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-105 dark:border-gray-700/60 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs animate-in fade-in duration-300">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse shrink-0"></span>
+                <div>
+                  <h5 className="text-xs font-bold text-gray-900 dark:text-gray-100">Planificador de Google Workspace</h5>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400">Sincroniza este proyecto para alertas globales y organización de equipos</p>
+                </div>
+              </div>
+              <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                <button
+                  onClick={handleSyncToGoogleCalendar}
+                  disabled={googleSyncLoading !== null}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/35 rounded-lg border border-blue-105 dark:border-blue-900/50 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <Calendar size={13} />
+                  {googleSyncLoading === 'calendar' ? 'Sincronizando...' : 'Agendar Inicio'}
+                </button>
+                <button
+                  onClick={handleSyncToGoogleTasks}
+                  disabled={googleSyncLoading !== null}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/35 rounded-lg border border-indigo-105 dark:border-indigo-900/50 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <CheckSquare size={13} />
+                  {googleSyncLoading === 'task' ? 'Agregando...' : 'Crear Tarea'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {statusMessage && (
+            <p className="mt-2 p-2 text-center text-xs font-extrabold rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-155 dark:border-gray-800 animate-in fade-in">
+              {statusMessage}
+            </p>
           )}
           
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
