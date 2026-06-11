@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { ServiceTask, Client, Budget } from "../types";
-import { Plus, Trash2, Edit2, CheckCircle2, Clock, X, MessageCircle, Calendar, DollarSign, Timer, FileText, CheckSquare } from "lucide-react";
+import { Plus, Trash2, Edit2, CheckCircle2, Clock, X, MessageCircle, Calendar, DollarSign, Timer, FileText } from "lucide-react";
 import { Modal } from "./Modal";
 
 export function ServiceTasksList({ clientId, projectId }: { clientId?: string, projectId?: string }) {
@@ -13,64 +13,14 @@ export function ServiceTasksList({ clientId, projectId }: { clientId?: string, p
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<"all" | "pending" | "completed">("all");
-  const [googleConnected, setGoogleConnected] = useState(false);
-  const [googleSyncLoading, setGoogleSyncLoading] = useState<Record<string, 'calendar' | 'task' | null>>({});
-  const [statusMessage, setStatusMessage] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    Promise.all([
-      api.getServiceTasks(), 
-      api.getClients(),
-      api.getGoogleStatus().catch(() => ({ connected: false }))
-    ]).then(([ts, clis, gStatus]) => {
+    Promise.all([api.getServiceTasks(), api.getClients()]).then(([ts, clis]) => {
       setTasks(ts);
       const clientMap = clis.reduce((acc, c) => ({ ...acc, [c.id]: c }), {});
       setClients(clientMap);
-      setGoogleConnected(gStatus?.connected || false);
     });
   }, []);
-
-  const handleSyncToGoogleCalendar = async (e: React.MouseEvent, task: ServiceTask) => {
-    e.stopPropagation();
-    setGoogleSyncLoading(prev => ({ ...prev, [task.id]: 'calendar' }));
-    setStatusMessage(prev => ({ ...prev, [task.id]: "Sincronizando con Google Calendar..." }));
-    try {
-      const cli = clients[task.clientId];
-      const clientName = cli ? `${cli.firstName} ${cli.lastName}` : "Cliente Desconocido";
-      const res = await api.createGoogleCalendarEvent({
-        title: `🤖 GeekyFix: ${task.description.split('\n')[0] || "Servicio"}`,
-        description: `Detalles del Servicio Técnico:\nCliente: ${clientName}\nFecha: ${task.date}\nPrecio: $${task.amount.toLocaleString('es-AR')}\n\nDetalles:\n${task.description}`,
-        date: task.date
-      });
-      setStatusMessage(prev => ({ ...prev, [task.id]: "✅ ¡Agregado a tu Google Calendar!" }));
-    } catch (err: any) {
-      console.error(err);
-      setStatusMessage(prev => ({ ...prev, [task.id]: `❌ Error: ${err.message || "No se pudo sincronizar"}` }));
-    } finally {
-      setGoogleSyncLoading(prev => ({ ...prev, [task.id]: null }));
-    }
-  };
-
-  const handleSyncToGoogleTasks = async (e: React.MouseEvent, task: ServiceTask) => {
-    e.stopPropagation();
-    setGoogleSyncLoading(prev => ({ ...prev, [task.id]: 'task' }));
-    setStatusMessage(prev => ({ ...prev, [task.id]: "Sincronizando con Google Tasks..." }));
-    try {
-      const cli = clients[task.clientId];
-      const clientName = cli ? `${cli.firstName} ${cli.lastName}` : "Cliente Desconocido";
-      const res = await api.createGoogleTask({
-        title: `🔧 GeekyFix: ${task.description.split('\n')[0] || "Servicio"}`,
-        notes: `Servicio Técnico\nCliente: ${clientName}\nPrecio del trabajo: $${task.amount.toLocaleString('es-AR')}\nDetalles:\n${task.description}`,
-        dueDate: task.date
-      });
-      setStatusMessage(prev => ({ ...prev, [task.id]: "✅ ¡Añadido a tus tareas de Google Tasks!" }));
-    } catch (err: any) {
-      console.error(err);
-      setStatusMessage(prev => ({ ...prev, [task.id]: `❌ Error: ${err.message || "No se pudo sincronizar"}` }));
-    } finally {
-      setGoogleSyncLoading(prev => ({ ...prev, [task.id]: null }));
-    }
-  };
 
   const handleToggleCompleted = async (e: React.MouseEvent, task: ServiceTask) => {
     e.stopPropagation();
@@ -242,39 +192,6 @@ export function ServiceTasksList({ clientId, projectId }: { clientId?: string, p
                       {task.description}
                     </p>
                   </div>
-
-                  {googleConnected && (
-                    <div className="flex flex-col sm:flex-row border border-gray-100 dark:border-gray-850 rounded-xl bg-white dark:bg-gray-800 p-3 items-center justify-between gap-3 w-full animate-in fade-in duration-300">
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse shrink-0"></span>
-                        <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Integración de Google Workspace activa</p>
-                      </div>
-                      <div className="flex gap-2 w-full sm:w-auto">
-                        <button
-                          onClick={(e) => handleSyncToGoogleCalendar(e, task)}
-                          disabled={googleSyncLoading[task.id] !== null}
-                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/35 rounded-lg border border-blue-100 dark:border-blue-900/50 transition-all active:scale-95 disabled:opacity-50"
-                        >
-                          <Calendar size={13} />
-                          {googleSyncLoading[task.id] === 'calendar' ? 'Sincronizando...' : 'Agendar en Calendar'}
-                        </button>
-                        <button
-                          onClick={(e) => handleSyncToGoogleTasks(e, task)}
-                          disabled={googleSyncLoading[task.id] !== null}
-                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/35 rounded-lg border border-indigo-100 dark:border-indigo-900/50 transition-all active:scale-95 disabled:opacity-50"
-                        >
-                          <CheckSquare size={13} />
-                          {googleSyncLoading[task.id] === 'task' ? 'Sincronizando...' : 'Crear Google Task'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {statusMessage[task.id] && (
-                    <p className="p-2 text-center text-xs font-extrabold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 animate-in fade-in">
-                      {statusMessage[task.id]}
-                    </p>
-                  )}
 
                   <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
                     <button 

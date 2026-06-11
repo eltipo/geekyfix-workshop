@@ -82,7 +82,7 @@ export function Dashboard({
             completedTicketsToday: 0
           });
 
-          setRecentProjects(projects.slice().reverse());
+          setRecentProjects(projects.slice(-5).reverse());
         }
       } catch (err) {
         console.error("Error loading dashboard data", err);
@@ -247,11 +247,11 @@ export function Dashboard({
             <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 col-span-full">
               <h3 className="font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
                 <Folder size={18} className="text-indigo-500" />
-                Proyectos
+                Proyectos Recientes
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {recentProjects.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4 col-span-full">No hay proyectos registrados.</p>
+                  <p className="text-sm text-gray-500 text-center py-4 col-span-full">No hay proyectos recientes.</p>
                 ) : (
                   recentProjects.map(project => (
                     <div 
