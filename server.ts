@@ -689,6 +689,326 @@ async function getOrCreateGeekyFixCalendar(token: string, db: any) {
   }
 }
 
+// Helper to get or create secondary "GeekyFix" Google Tasks List
+async function getOrCreateGeekyFixTaskList(token: string, db: any) {
+  if (db.googleAuth?.taskListId) {
+    return db.googleAuth.taskListId;
+  }
+
+  try {
+    const listRes = await globalThis.fetch("https://www.googleapis.com/tasks/v1/users/@me/lists", {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+
+    if (!listRes.ok) {
+      const errText = await listRes.text();
+      console.error("Error listing task lists:", errText);
+      throw new Error(`Google Tasks List Error: ${errText}`);
+    }
+
+    const listData = await listRes.json();
+    const existingList = listData.items?.find((list: any) => list.title === "GeekyFix" || list.title === "geekyfix");
+
+    if (existingList) {
+      if (!db.googleAuth) {
+        db.googleAuth = {};
+      }
+      db.googleAuth.taskListId = existingList.id;
+      await writeDb(db);
+      return existingList.id;
+    }
+
+    // List not found, create "GeekyFix"
+    const createRes = await globalThis.fetch("https://www.googleapis.com/tasks/v1/users/@me/lists", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        title: "GeekyFix"
+      })
+    });
+
+    if (!createRes.ok) {
+      const errText = await createRes.text();
+      console.error("Error creating Google Tasks list:", errText);
+      throw new Error(`Google Tasks list creation error: ${errText}`);
+    }
+
+    const createData = await createRes.json();
+    if (!db.googleAuth) {
+      db.googleAuth = {};
+    }
+    db.googleAuth.taskListId = createData.id;
+    await writeDb(db);
+    return createData.id;
+  } catch (err: any) {
+    console.error("Helper getOrCreateGeekyFixTaskList exception:", err);
+    throw err;
+  }
+}
+
+// Create task in Google Tasks "GeekyFix" list from a local ServiceTask
+async function createGoogleTaskFromLocal(localTask: any, db: any) {
+  if (!db.googleAuth || !db.googleAuth.connected || db.googleAuth.isSandbox) {
+    return null;
+  }
+
+  try {
+    const token = await getFreshGoogleAccessToken(db);
+    const tasklistId = await getOrCreateGeekyFixTaskList(token, db);
+
+    let clientName = "Cliente Desconocido";
+    if (localTask.clientId) {
+      const cli = db.clients?.find((c: any) => c.id === localTask.clientId);
+      if (cli) {
+        clientName = `${cli.firstName} ${cli.lastName}`;
+      }
+    }
+
+    const taskObj: any = {
+      title: `🔧 GeekyFix: ${localTask.description.split('\n')[0] || "Servicio"}`,
+      notes: `Detalle del Servicio:\nCliente: ${clientName}\nTiempo empleado: ${localTask.duration || "N/A"}\nMonto cobrado: $${localTask.amount || 0}\n\nDescripción:\n${localTask.description}`,
+      status: localTask.isCompleted ? "completed" : "needsAction"
+    };
+
+    if (localTask.date) {
+      const parsedDate = new Date(localTask.date);
+      taskObj.due = parsedDate.toISOString();
+    }
+
+    const createTaskRes = await globalThis.fetch(`https://www.googleapis.com/tasks/v1/lists/${tasklistId}/tasks`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(taskObj)
+    });
+
+    if (createTaskRes.ok) {
+      const taskData = await createTaskRes.json();
+      return taskData.id;
+    } else {
+      const errText = await createTaskRes.text();
+      console.error("Failed to create task on Google Tasks:", errText);
+    }
+  } catch (err) {
+    console.error("Failed to create task on Google Tasks exception:", err);
+  }
+  return null;
+}
+
+// Update task in Google Tasks "GeekyFix" list from a local ServiceTask
+async function updateGoogleTaskFromLocal(localTask: any, db: any) {
+  if (!db.googleAuth || !db.googleAuth.connected || db.googleAuth.isSandbox) {
+    return;
+  }
+
+  try {
+    const token = await getFreshGoogleAccessToken(db);
+    const tasklistId = await getOrCreateGeekyFixTaskList(token, db);
+
+    if (!localTask.googleTaskId) {
+      // Create it since it has no ID linked yet
+      const taskId = await createGoogleTaskFromLocal(localTask, db);
+      if (taskId) {
+        localTask.googleTaskId = taskId;
+      }
+      return;
+    }
+
+    let clientName = "Cliente Desconocido";
+    if (localTask.clientId) {
+      const cli = db.clients?.find((c: any) => c.id === localTask.clientId);
+      if (cli) {
+        clientName = `${cli.firstName} ${cli.lastName}`;
+      }
+    }
+
+    const taskObj: any = {
+      title: `🔧 GeekyFix: ${localTask.description.split('\n')[0] || "Servicio"}`,
+      notes: `Detalle del Servicio:\nCliente: ${clientName}\nTiempo empleado: ${localTask.duration || "N/A"}\nMonto cobrado: $${localTask.amount || 0}\n\nDescripción:\n${localTask.description}`,
+      status: localTask.isCompleted ? "completed" : "needsAction"
+    };
+
+    if (localTask.date) {
+      const parsedDate = new Date(localTask.date);
+      taskObj.due = parsedDate.toISOString();
+    }
+
+    const updateTaskRes = await globalThis.fetch(`https://www.googleapis.com/tasks/v1/lists/${tasklistId}/tasks/${encodeURIComponent(localTask.googleTaskId)}`, {
+      method: "PATCH",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(taskObj)
+    });
+
+    if (!updateTaskRes.ok) {
+      const errText = await updateTaskRes.text();
+      console.error("Failed to update task on Google Tasks:", errText);
+    }
+  } catch (err) {
+    console.error("Failed to update task on Google Tasks exception:", err);
+  }
+}
+
+// Delete task from Google Tasks "GeekyFix" list
+async function deleteGoogleTask(googleTaskId: string, db: any) {
+  if (!db.googleAuth || !db.googleAuth.connected || db.googleAuth.isSandbox || !googleTaskId) {
+    return;
+  }
+
+  try {
+    const token = await getFreshGoogleAccessToken(db);
+    const tasklistId = await getOrCreateGeekyFixTaskList(token, db);
+
+    const deleteRes = await globalThis.fetch(`https://www.googleapis.com/tasks/v1/lists/${tasklistId}/tasks/${encodeURIComponent(googleTaskId)}`, {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+
+    if (!deleteRes.ok) {
+      const errText = await deleteRes.text();
+      console.error("Failed to delete task from Google Tasks:", errText);
+    }
+  } catch (err) {
+    console.error("Error deleting Google Task:", err);
+  }
+}
+
+// Bidirectional Google Tasks <-> Local Database Synchronizer
+async function syncGoogleTasks(db: any) {
+  if (!db.googleAuth || !db.googleAuth.connected) {
+    return false;
+  }
+
+  // Sandbox simulation: create virtual test tasks if missing
+  if (db.googleAuth.isSandbox) {
+    if (!db.serviceTasks) {
+      db.serviceTasks = [];
+    }
+    const hasSandboxTask = db.serviceTasks.some((t: any) => t.googleTaskId && t.googleTaskId.startsWith("sandbox-gtask"));
+    if (!hasSandboxTask) {
+      db.serviceTasks.push({
+        id: "sandbox-local-gtask-1",
+        clientId: "",
+        date: new Date().toISOString().split('T')[0],
+        description: "🔧 GeekyFix (Sandbox): Cambiar Pantalla iPhone 13",
+        duration: "1h 30m",
+        amount: 8500,
+        isCompleted: false,
+        googleTaskId: "sandbox-gtask-1"
+      });
+      db.serviceTasks.push({
+        id: "sandbox-local-gtask-2",
+        clientId: "",
+        date: new Date().toISOString().split('T')[0],
+        description: "🔧 GeekyFix (Sandbox): Limpieza Física PS5",
+        duration: "1h",
+        amount: 5000,
+        isCompleted: true,
+        googleTaskId: "sandbox-gtask-2"
+      });
+      await writeDb(db);
+    }
+    return true;
+  }
+
+  try {
+    const token = await getFreshGoogleAccessToken(db);
+    const tasklistId = await getOrCreateGeekyFixTaskList(token, db);
+
+    // Fetch all Google Tasks (completed + active)
+    const listsRes = await globalThis.fetch(`https://www.googleapis.com/tasks/v1/lists/${tasklistId}/tasks?showCompleted=true&showHidden=true&maxResults=100`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+
+    if (!listsRes.ok) {
+      const errText = await listsRes.text();
+      console.error("Error fetching tasks list from Google:", errText);
+      return false;
+    }
+
+    const tasksData = await listsRes.json();
+    const googleTasksList: any[] = tasksData.items || [];
+    const googleTaskMap = new Map<string, any>(googleTasksList.map((t: any) => [t.id, t]));
+
+    let dbChanged = false;
+    if (!db.serviceTasks) {
+      db.serviceTasks = [];
+    }
+
+    // 1. Sync local tasks to Google Tasks (or update statuses)
+    for (let i = 0; i < db.serviceTasks.length; i++) {
+      const localTask = db.serviceTasks[i];
+      if (localTask.googleTaskId) {
+        const matchingGTask = googleTaskMap.get(localTask.googleTaskId);
+        if (matchingGTask) {
+          const gTaskIsCompleted = matchingGTask.status === "completed";
+          if (localTask.isCompleted !== gTaskIsCompleted) {
+            localTask.isCompleted = gTaskIsCompleted;
+            dbChanged = true;
+          }
+        }
+      } else {
+        // Create new Google task from local task
+        try {
+          const taskId = await createGoogleTaskFromLocal(localTask, db);
+          if (taskId) {
+            localTask.googleTaskId = taskId;
+            dbChanged = true;
+          }
+        } catch (postErr) {
+          console.error("Failed to automatically create Google Task:", postErr);
+        }
+      }
+    }
+
+    // 2. Sync Google Tasks that are missing locally (vice versa import)
+    const localGoogleTaskIds = new Set(db.serviceTasks.map((t: any) => t.googleTaskId).filter(Boolean));
+    for (const gTask of googleTasksList) {
+      if (!localGoogleTaskIds.has(gTask.id)) {
+        const isCompleted = gTask.status === "completed";
+        const title = gTask.title || "Tarea Importada de Google Tasks";
+        
+        let cleanDescription = title;
+        if (title.startsWith("🔧 GeekyFix:")) {
+          cleanDescription = title.replace("🔧 GeekyFix:", "").trim();
+        }
+
+        let taskDate = new Date().toISOString().split('T')[0];
+        if (gTask.due) {
+          taskDate = gTask.due.split('T')[0];
+        }
+
+        db.serviceTasks.push({
+          id: uuidv4(),
+          clientId: "",
+          date: taskDate,
+          description: gTask.notes ? `${cleanDescription}\n\n[Google Tasks]: ${gTask.notes}` : cleanDescription,
+          duration: "1h",
+          amount: 0,
+          isCompleted: isCompleted,
+          googleTaskId: gTask.id
+        });
+        dbChanged = true;
+      }
+    }
+
+    if (dbChanged) {
+      await writeDb(db);
+    }
+    return true;
+  } catch (error) {
+    console.error("syncGoogleTasks internal error:", error);
+    return false;
+  }
+}
+
 // Fetch events from the GeekyFix Google Calendar
 app.get("/api/google/calendar/events", async (req, res) => {
   try {
@@ -801,39 +1121,7 @@ app.post("/api/google/tasks/create", async (req, res) => {
     }
 
     const token = await getFreshGoogleAccessToken(db);
-
-    // Get or Create "GeekyFix Tasks" list
-    const listsRes = await globalThis.fetch("https://www.googleapis.com/tasks/v1/users/@me/lists", {
-      headers: { "Authorization": `Bearer ${token}` }
-    });
-
-    if (!listsRes.ok) {
-      const errText = await listsRes.text();
-      throw new Error(`Google Tasks List API Error: ${errText}`);
-    }
-
-    const listsData = await listsRes.json();
-    let tasklistId = "";
-    const geekyFixList = listsData.items?.find((list: any) => list.title === "GeekyFix Tasks");
-
-    if (geekyFixList) {
-      tasklistId = geekyFixList.id;
-    } else {
-      const createListRes = await globalThis.fetch("https://www.googleapis.com/tasks/v1/users/@me/lists", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ title: "GeekyFix Tasks" })
-      });
-      if (!createListRes.ok) {
-        const errText = await createListRes.text();
-        throw new Error(`Google Tasks Create List Error: ${errText}`);
-      }
-      const newListData = await createListRes.json();
-      tasklistId = newListData.id;
-    }
+    const tasklistId = await getOrCreateGeekyFixTaskList(token, db);
 
     const taskObj: any = {
       title: title,
@@ -1679,6 +1967,11 @@ app.delete("/api/service-types/:id", async (req, res) => {
 // Service Tasks API
 app.get("/api/service-tasks", async (req, res) => {
   const db = await readDb();
+  try {
+    await syncGoogleTasks(db);
+  } catch (syncErr) {
+    console.error("Failed to sync google tasks on service GET:", syncErr);
+  }
   res.json(db.serviceTasks || []);
 });
 
@@ -1686,6 +1979,16 @@ app.post("/api/service-tasks", async (req, res) => {
   const db = await readDb();
   if (!db.serviceTasks) db.serviceTasks = [];
   const newTask = { id: uuidv4(), ...req.body };
+  
+  try {
+    const googleTaskId = await createGoogleTaskFromLocal(newTask, db);
+    if (googleTaskId) {
+      newTask.googleTaskId = googleTaskId;
+    }
+  } catch (err) {
+    console.error("Failed to automatically export service task to Google Tasks:", err);
+  }
+
   db.serviceTasks.push(newTask);
   await writeDb(db);
   res.json(newTask);
@@ -1696,7 +1999,15 @@ app.put("/api/service-tasks/:id", async (req, res) => {
   const index = db.serviceTasks.findIndex((t: any) => t.id === req.params.id);
   if (index === -1) return res.status(404).json({ error: "Not found" });
   
-  db.serviceTasks[index] = { ...db.serviceTasks[index], ...req.body };
+  const updatedTask = { ...db.serviceTasks[index], ...req.body };
+
+  try {
+    await updateGoogleTaskFromLocal(updatedTask, db);
+  } catch (err) {
+    console.error("Failed to update Google Task during PUT:", err);
+  }
+
+  db.serviceTasks[index] = updatedTask;
   await writeDb(db);
   res.json(db.serviceTasks[index]);
 });
@@ -1704,6 +2015,16 @@ app.put("/api/service-tasks/:id", async (req, res) => {
 app.delete("/api/service-tasks/:id", async (req, res) => {
   const db = await readDb();
   if (!db.serviceTasks) db.serviceTasks = [];
+  
+  const taskToDelete = db.serviceTasks.find((t: any) => t.id === req.params.id);
+  if (taskToDelete && taskToDelete.googleTaskId) {
+    try {
+      await deleteGoogleTask(taskToDelete.googleTaskId, db);
+    } catch (err) {
+      console.error("Failed to delete Google Tasks on deletion:", err);
+    }
+  }
+
   db.serviceTasks = db.serviceTasks.filter((t: any) => t.id !== req.params.id);
   await writeDb(db);
   res.status(204).send();
