@@ -207,6 +207,27 @@ app.post("/api/settings/password", async (req, res) => {
   res.json({ success: true, token: newPassword });
 });
 
+app.get("/api/settings", async (req, res) => {
+  const db = await readDb();
+  // Don't expose password
+  const { password, ...safeSettings } = db.settings || {};
+  res.json(safeSettings);
+});
+
+app.put("/api/settings", async (req, res) => {
+  const db = await readDb();
+  if (!db.settings) db.settings = {};
+  
+  // We keep password as is, and update everything else
+  const password = db.settings.password;
+  db.settings = { ...db.settings, ...req.body, password };
+  
+  await writeDb(db);
+  
+  const { password: _, ...safeSettings } = db.settings;
+  res.json(safeSettings);
+});
+
 app.get("/api/debug", (req, res) => {
   const routes: string[] = [];
   // @ts-ignore
@@ -786,15 +807,16 @@ Problema inicial reportado: ${device.problem || "No especificado"}\n\n`;
     }
 
     // Now call Gemini model!
-    if (!process.env.GEMINI_API_KEY) {
+    const apiKey = db.settings?.geminiApiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
       return res.status(400).json({ 
-        error: "La clave API de Gemini (GEMINI_API_KEY) no está configurada. Por favor, añádela en la sección de secretos (Settings > Secrets) de AI Studio." 
+        error: "La clave API de Gemini no está configurada. Por favor, añádela en la sección de Configuración del sistema." 
       });
     }
 
     // Initialize GoogleGenAI client
     const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
+      apiKey: apiKey,
       httpOptions: {
         headers: {
           'User-Agent': 'aistudio-build',

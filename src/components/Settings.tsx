@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
 import { ServiceType } from "../types";
-import { Download, Upload, ShieldCheck, AlertTriangle, RefreshCw, Database, HardDrive, History, Plus, Trash2, Edit2, Save, X, Briefcase, Info, ExternalLink, ChevronRight, Lock, Fingerprint } from "lucide-react";
+import { Download, Upload, ShieldCheck, AlertTriangle, RefreshCw, Database, HardDrive, History, Plus, Trash2, Edit2, Save, X, Briefcase, Info, ExternalLink, ChevronRight, Lock, Fingerprint, Bot } from "lucide-react";
 import { Modal } from "./Modal";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 
@@ -18,6 +18,9 @@ export function Settings() {
   const [passwordForm, setPasswordForm] = useState({ current: "", newPass: "", confirm: "" });
   const [passwordMsg, setPasswordMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
+  
+  const [generalSettings, setGeneralSettings] = useState<{ geminiApiKey?: string }>({});
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const APP_VERSION = "v1.6.0";
   const CHANGELOG = [
@@ -31,7 +34,22 @@ export function Settings() {
 
   useEffect(() => {
     api.getServiceTypes().then(setServiceTypes);
+    api.getSettings().then(setGeneralSettings).catch(console.error);
   }, []);
+
+  const handleSaveGeneralSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      const updated = await api.updateSettings(generalSettings);
+      setGeneralSettings(updated);
+      setMessage({ type: 'success', text: 'Configuración guardada correctamente' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (e: any) {
+      setMessage({ type: 'error', text: 'Error al guardar la configuración' });
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   const handleAddService = async () => {
     if (!newService.name) return;
@@ -335,6 +353,41 @@ export function Settings() {
         >
           Configurar Biometría
         </button>
+      </div>
+
+      {/* AI Settings Card */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl shrink-0">
+              <Bot size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Inteligencia Artificial</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Configura la conexión con Gemini AI para el asistente de diagnóstico</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-6 flex flex-col sm:flex-row gap-4 items-end">
+          <div className="flex-1 w-full">
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Clave API de Gemini</label>
+            <input 
+              type="password"
+              placeholder="AIzaSy..."
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+              value={generalSettings.geminiApiKey || ""}
+              onChange={(e) => setGeneralSettings({...generalSettings, geminiApiKey: e.target.value})}
+            />
+          </div>
+          <button 
+            onClick={handleSaveGeneralSettings}
+            disabled={isSavingSettings}
+            className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm transition-colors disabled:opacity-70 flex items-center justify-center gap-2"
+          >
+            <Save size={18} />
+            {isSavingSettings ? "Guardando..." : "Guardar Clave API"}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

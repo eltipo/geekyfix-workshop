@@ -483,4 +483,16 @@ export const api = {
     }
     return res.json();
   },
+  getSettings: async (): Promise<any> => {
+    const res = await fetch("/api/settings");
+    return res.json();
+  },
+  updateSettings: async (settings: any): Promise<any> => {
+    const res = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+    return res.json();
+  },
 };
