@@ -7,9 +7,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { getBase64ImageFromUrl } from "../lib/utils";
+import { DebtorsNotificationList } from "./DebtorsNotificationList";
 
 export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
-  const [activeTab, setActiveTab] = useState<"cashflow" | "receivables" | "subscriptions">("cashflow");
+  const [activeTab, setActiveTab] = useState<"cashflow" | "receivables" | "subscriptions" | "debtors">("cashflow");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -678,6 +679,12 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
           >
             <Repeat size={18} /> Suscripciones
           </button>
+          <button 
+            onClick={() => setActiveTab('debtors')}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${activeTab === 'debtors' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
+          >
+            <MessageSquare size={18} className="text-red-500" /> Recordatorios de Pago (WhatsApp)
+          </button>
         </div>
       </div>
 
@@ -1193,6 +1200,25 @@ export function FinanceList({ appMode }: { appMode: "workshop" | "project" }) {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'debtors' && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6 mb-[80px]">
+          <div className="border-b border-gray-100 dark:border-gray-700 pb-4 mb-6">
+            <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2 text-lg">
+              <MessageSquare size={20} className="text-red-500" />
+              Notificador de Clientes Deudores
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Envía recordatorios de pago de manera profesional con plantillas de texto directo a WhatsApp.
+            </p>
+          </div>
+          <DebtorsNotificationList 
+            clients={clients} 
+            receivables={receivables} 
+            onRefresh={fetchData} 
+          />
         </div>
       )}
 

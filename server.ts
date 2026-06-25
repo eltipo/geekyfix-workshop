@@ -724,8 +724,8 @@ Problema inicial reportado: ${device.problem || "No especificado"}\n\n`;
       });
     }
 
-    // Deduplicate and take top 10 photos to keep payload optimal
-    const uniquePhotos = Array.from(new Set(allPhotos)).slice(0, 10);
+    // Deduplicate and take top 3 photos to keep payload optimal and prevent 503 Service Unavailable errors due to massive payloads
+    const uniquePhotos = Array.from(new Set(allPhotos)).slice(0, 3);
     const imageParts: any[] = [];
 
     // Read unique local files
@@ -786,6 +786,12 @@ Problema inicial reportado: ${device.problem || "No especificado"}\n\n`;
     }
 
     // Now call Gemini model!
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(400).json({ 
+        error: "La clave API de Gemini (GEMINI_API_KEY) no está configurada. Por favor, añádela en la sección de secretos (Settings > Secrets) de AI Studio." 
+      });
+    }
+
     // Initialize GoogleGenAI client
     const ai = new GoogleGenAI({
       apiKey: process.env.GEMINI_API_KEY,
@@ -796,15 +802,62 @@ Problema inicial reportado: ${device.problem || "No especificado"}\n\n`;
       }
     });
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents,
-      config: {
-        systemInstruction: "Eres GeekyFix AI, un asistente de diagnóstico técnico experto en hardware, electrónica y software. Ayudas a los técnicos del taller a resolver problemas de computadoras, celulares, consolas y otros equipos. Analiza el problema, las especificaciones técnicas del equipo, los reportes o tareas de servicio pendientes, y las fotos del perfil del equipo (que pueden mostrar daños físicos, placas lógicas, o pantallas de error). Da respuestas en español, claras, profesionales, estructuradas y con consejos prácticos y lógicos paso a paso para diagnosticar, resolver problemas y completar los tickets. Ofrece soluciones muy detalladas electrónicas o de micro-soldadura donde amerite."
-      }
-    });
+    // Try multiple candidate models sequentially with exponential backoff in case of rate limits or high demand (503 errors)
+    const modelsToTry = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.1-pro-preview"];
+    let lastError: any = null;
+    let responseText = "";
 
-    res.json({ text: response.text });
+    const systemInstruction = "Eres GeekyFix AI, un asistente de diagnóstico técnico experto en hardware, electrónica y software. Ayudas a los técnicos del taller a resolver problemas de computadoras, celulares, consolas y otros equipos. Analiza el problema, las especificaciones técnicas del equipo, los reportes o tareas de servicio pendientes, y las fotos del perfil del equipo (que pueden mostrar daños físicos, placas lógicas, o pantallas de error). Da respuestas en español, claras, profesionales, estructuradas y con consejos prácticos y lógicos paso a paso para diagnosticar, resolver problemas y completar los tickets. Ofrece soluciones muy detalladas electrónicas o de micro-soldadura donde amerite.";
+
+    for (const modelName of modelsToTry) {
+      let delay = 300; // start with 300ms delay
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          console.log(`Intentando generar contenido con ${modelName} (intento ${attempt}/3)`);
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents,
+            config: {
+              systemInstruction
+            }
+          });
+          
+          if (response && response.text) {
+            responseText = response.text;
+            console.log(`Éxito con el modelo ${modelName} en el intento ${attempt}`);
+            break;
+          }
+        } catch (error: any) {
+          console.error(`Error con modelo ${modelName} en intento ${attempt}:`, error);
+          lastError = error;
+          
+          // Check if it's a non-transient error (like PERMISSION_DENIED or API_KEY_INVALID)
+          const status = error.status || (error.error && error.error.status);
+          const code = error.code || (error.error && error.error.code);
+          const isTransient = status === "UNAVAILABLE" || code === 503 || status === "RESOURCE_EXHAUSTED" || code === 429 || String(error).includes("503") || String(error).includes("429");
+          
+          if (!isTransient) {
+            // Non-transient error, break retry loop to try next model
+            break;
+          }
+
+          if (attempt < 3) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2; // exponential increase
+          }
+        }
+      }
+
+      if (responseText) {
+        break; // Stop trying other models since we succeeded
+      }
+    }
+
+    if (!responseText) {
+      throw lastError || new Error("No se pudo obtener respuesta de ningún modelo de Gemini tras múltiples intentos.");
+    }
+
+    res.json({ text: responseText });
   } catch (error: any) {
     console.error("Error in diagnostics assistant endpoint:", error);
     res.status(500).json({ error: error.message || "Error al procesar la solicitud con Gemini" });
