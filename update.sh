@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Compatibilidad para versiones antiguas de Docker API
-export DOCKER_API_VERSION=1.41
+#export DOCKER_API_VERSION=1.41
 
 echo "Obteniendo las últimas actualizaciones de GitHub..."
 git pull origin main
