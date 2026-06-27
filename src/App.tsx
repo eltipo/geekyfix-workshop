@@ -171,7 +171,7 @@ export default function App() {
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col font-sans transition-colors duration-200 text-sm sm:text-base overflow-hidden">
       {/* Header */}
       <header className="bg-blue-600 dark:bg-gray-800 text-white p-2 sm:p-4 shadow-md z-10 border-b border-transparent dark:border-gray-700 transition-colors duration-200 shrink-0">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-2">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
           <div 
             className="flex items-center gap-2 cursor-pointer shrink-0"
             onClick={() => { setCurrentTab("home"); setSelectedClientId(undefined); }}
@@ -251,7 +251,7 @@ export default function App() {
 
         {/* App Drawer Content */}
         <div className={`fixed top-[52px] sm:top-[64px] left-0 right-0 bg-blue-600 dark:bg-gray-800 shadow-2xl z-50 border-b border-blue-500 dark:border-gray-700 transition-all duration-300 transform ${isDrawerOpen ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0 pointer-events-none"}`}>
-          <div className="max-w-3xl mx-auto p-4 sm:p-6">
+          <div className="max-w-7xl mx-auto p-4 sm:p-6">
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 sm:gap-6">
               <DrawerItem 
                 icon={<Home size={24} />} 
@@ -345,7 +345,7 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto scroll-smooth relative scrollbar-hide">
-        <div className={`w-full max-w-3xl mx-auto p-3 sm:p-4 ${showFooter ? 'pb-32' : 'pb-10'} text-gray-900 dark:text-gray-100 transition-all duration-300`}>
+        <div className={`w-full max-w-7xl mx-auto p-3 sm:p-4 ${showFooter ? 'pb-32' : 'pb-10'} text-gray-900 dark:text-gray-100 transition-all duration-300`}>
           {currentTab === "home" && (
             <Dashboard 
               appMode={appMode}
