@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api";
-import { Device, Client, Ticket } from "../types";
-import { Smartphone, Calendar, AlertCircle, FileText, Upload, Camera, X, Edit2, Trash2, ClipboardPlus, CheckCircle2, Plus, Cpu, MessageCircle, ArrowLeft, ChevronRight, ChevronLeft, Clock, Check, ReceiptText, Filter, Search, ChevronDown, GripVertical, Bot } from "lucide-react";
+import { Device, Client, Ticket, DiagnosticReport } from "../types";
+import { Smartphone, Calendar, AlertCircle, FileText, Upload, Camera, X, Edit2, Trash2, ClipboardPlus, CheckCircle2, Plus, Cpu, MessageCircle, ArrowLeft, ChevronRight, ChevronLeft, Clock, Check, ReceiptText, Filter, Search, ChevronDown, GripVertical, Bot, HardDrive, Activity, Battery, ShieldAlert, Terminal, DownloadCloud, Play, Sparkles } from "lucide-react";
 import { Modal } from "./Modal";
 import { Reorder } from "motion/react";
 import { DeviceChatbot } from "./DeviceChatbot";
@@ -41,7 +41,9 @@ export function DevicesList({
   const [ticketFilter, setTicketFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [deviceFilter, setDeviceFilter] = useState<DeviceFilterStatus>(initialFilter);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeDetailTab, setActiveDetailTab] = useState<'info' | 'chat'>('info');
+  const [activeDetailTab, setActiveDetailTab] = useState<'info' | 'diag' | 'chat'>('info');
+  const [showDiagModal, setShowDiagModal] = useState(false);
+  const [copiedCmd, setCopiedCmd] = useState(false);
 
   useEffect(() => {
     setActiveDetailTab('info');
@@ -344,7 +346,7 @@ export function DevicesList({
             </div>
           </div>
           
-          {/* Subtabs for Detail & AI Diagnostic Assistant */}
+          {/* Subtabs for Detail, Windows Diagnostic & AI Assistant */}
           <div className="flex border-b border-gray-150 dark:border-gray-750 -mx-4 mb-4 bg-gray-50/50 dark:bg-gray-900/10">
             <button
               onClick={() => setActiveDetailTab('info')}
@@ -358,6 +360,20 @@ export function DevicesList({
               Ficha del Equipo
             </button>
             <button
+              onClick={() => setActiveDetailTab('diag')}
+              className={`flex-1 py-3 text-center text-sm font-bold border-b-2 transition-all flex items-center justify-center gap-2 relative ${
+                activeDetailTab === 'diag'
+                  ? 'border-blue-600 text-blue-600 dark:border-indigo-500 dark:text-indigo-400 bg-white dark:bg-gray-800'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              <Activity size={16} className={selectedDevice.diagnosticReport ? "text-emerald-500" : ""} />
+              Diagnóstico Windows
+              {selectedDevice.diagnosticReport && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+              )}
+            </button>
+            <button
               onClick={() => setActiveDetailTab('chat')}
               className={`flex-1 py-3 text-center text-sm font-bold border-b-2 transition-all flex items-center justify-center gap-2 relative ${
                 activeDetailTab === 'chat'
@@ -367,15 +383,286 @@ export function DevicesList({
             >
               <Bot size={16} className={activeDetailTab === 'chat' ? 'text-indigo-500 animate-pulse' : ''} />
               Asistente Gemini AI
-              <span className="absolute right-4 sm:right-10 top-3 flex h-2.5 w-2.5">
+              <span className="absolute right-4 sm:right-6 top-3 flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
               </span>
             </button>
           </div>
 
           {activeDetailTab === 'chat' ? (
             <DeviceChatbot device={selectedDevice} />
+          ) : activeDetailTab === 'diag' ? (
+            <div className="space-y-6">
+              {/* Header and Download Tools */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50 dark:bg-gray-900/60 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                <div>
+                  <h4 className="text-base font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <Activity size={18} className="text-emerald-500" />
+                    Diagnóstico de Hardware y Sistema
+                  </h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {selectedDevice.diagnosticReport 
+                      ? `Último reporte recibido: ${new Date(selectedDevice.diagnosticReport.timestamp).toLocaleString()}`
+                      : "Aún no se ha recibido ningún diagnóstico automático de este equipo."
+                    }
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => setShowDiagModal(true)}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm active:scale-95"
+                  >
+                    <DownloadCloud size={15} />
+                    Descargar Cliente Portable
+                  </button>
+                  {selectedDevice.diagnosticReport && (
+                    <button
+                      onClick={() => setActiveDetailTab('chat')}
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-xs font-bold rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                      title="Analizar resultados con Gemini AI"
+                    >
+                      <Sparkles size={14} />
+                      Consultar a la IA
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {!selectedDevice.diagnosticReport ? (
+                <div className="text-center py-12 bg-gray-50 dark:bg-gray-900/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-6">
+                  <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Terminal size={26} />
+                  </div>
+                  <h4 className="text-base font-bold text-gray-800 dark:text-gray-200">Ejecuta el Diagnóstico en la PC del Cliente</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 max-w-md mx-auto mt-1 mb-5">
+                    Descarga el aplicativo portable independiente o corre el comando en PowerShell en Windows 10/11 para recolectar SMART, BSODs, estado de batería y componentes.
+                  </p>
+                  <button
+                    onClick={() => setShowDiagModal(true)}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm inline-flex items-center gap-2 transition-transform active:scale-95"
+                  >
+                    <Play size={15} />
+                    Ver Instrucciones y Descargar .exe
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* System & OS summary banner */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase">Sistema Operativo</p>
+                      <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate mt-0.5" title={selectedDevice.diagnosticReport.os?.caption}>
+                        {selectedDevice.diagnosticReport.os?.caption || "Windows"}
+                      </p>
+                      <p className="text-[10px] text-gray-400">{selectedDevice.diagnosticReport.os?.architecture} · Build {selectedDevice.diagnosticReport.os?.build}</p>
+                    </div>
+
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase">Procesador</p>
+                      <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate mt-0.5" title={selectedDevice.diagnosticReport.hardware?.cpu?.name}>
+                        {selectedDevice.diagnosticReport.hardware?.cpu?.name || "N/A"}
+                      </p>
+                      <p className="text-[10px] text-gray-400">{selectedDevice.diagnosticReport.hardware?.cpu?.cores} Núcleos / {selectedDevice.diagnosticReport.hardware?.cpu?.threads} Hilos</p>
+                    </div>
+
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase">Memoria RAM</p>
+                      <p className="text-sm font-bold text-gray-800 dark:text-gray-200 mt-0.5">
+                        {selectedDevice.diagnosticReport.hardware?.ram?.totalGB ?? 0} GB Total
+                      </p>
+                      <p className="text-[10px] text-gray-400">
+                        {selectedDevice.diagnosticReport.hardware?.ram?.usedPercent ?? 0}% en uso ({selectedDevice.diagnosticReport.hardware?.ram?.freeGB ?? 0} GB libre)
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase">Tiempo Encendido</p>
+                      <p className="text-sm font-bold text-gray-800 dark:text-gray-200 mt-0.5">
+                        {selectedDevice.diagnosticReport.os?.uptime || "N/A"}
+                      </p>
+                      <p className="text-[10px] text-gray-400">Uptime continuo</p>
+                    </div>
+                  </div>
+
+                  {/* Storage and SMART Health */}
+                  <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <HardDrive size={16} className="text-blue-500" />
+                        <h5 className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">Unidades de Almacenamiento & SMART</h5>
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        {selectedDevice.diagnosticReport.storage?.length || 0} dispositivo(s)
+                      </span>
+                    </div>
+
+                    <div className="divide-y divide-gray-100 dark:divide-gray-700 p-2">
+                      {selectedDevice.diagnosticReport.storage && selectedDevice.diagnosticReport.storage.length > 0 ? (
+                        selectedDevice.diagnosticReport.storage.map((disk, idx) => {
+                          const isHealthy = disk.healthStatus.toLowerCase().includes("healthy");
+                          return (
+                            <div key={idx} className="p-3 space-y-2">
+                              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-1">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-xs px-2 py-0.5 rounded font-bold ${
+                                    isHealthy 
+                                      ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                                      : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+                                  }`}>
+                                    {isHealthy ? "S.M.A.R.T OK" : "Atención SMART"}
+                                  </span>
+                                  <span className="font-bold text-sm text-gray-800 dark:text-gray-200">{disk.model}</span>
+                                  <span className="text-xs text-gray-400">({disk.mediaType || "Disco"} · {disk.sizeGB} GB)</span>
+                                </div>
+                              </div>
+
+                              {disk.smartAlerts && disk.smartAlerts.length > 0 && (
+                                <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-2 rounded text-xs">
+                                  {disk.smartAlerts.map((a, aIdx) => <p key={aIdx}>⚠️ {a}</p>)}
+                                </div>
+                              )}
+
+                              {disk.partitions && disk.partitions.length > 0 && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                  {disk.partitions.map((part, pIdx) => (
+                                    <div key={pIdx} className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-xs border border-gray-150 dark:border-gray-800">
+                                      <div className="flex justify-between font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        <span>Partición {part.driveLetter}</span>
+                                        <span className="tabular-nums">{part.freeGB} GB libres de {part.totalGB} GB</span>
+                                      </div>
+                                      <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                        <div 
+                                          className={`h-full ${part.percentFree < 10 ? 'bg-red-500' : 'bg-blue-500'}`}
+                                          style={{ width: `${100 - part.percentFree}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="p-4 text-xs text-gray-400 text-center">No se reportaron unidades de disco.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Battery Health Section (if laptop) */}
+                  {selectedDevice.diagnosticReport.battery?.present && (
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Battery size={16} className="text-amber-500" />
+                          <h5 className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">Batería & Desgaste</h5>
+                        </div>
+                        <span className="text-xs font-bold text-gray-600 dark:text-gray-400">
+                          {selectedDevice.diagnosticReport.battery.status}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div className="p-2.5 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                          <span className="text-gray-500 block">Salud de Batería</span>
+                          <span className="font-bold text-base text-gray-800 dark:text-gray-100 tabular-nums">
+                            {selectedDevice.diagnosticReport.battery.healthPercent ?? 100}%
+                          </span>
+                        </div>
+                        <div className="p-2.5 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                          <span className="text-gray-500 block">Ciclos de Carga</span>
+                          <span className="font-bold text-base text-gray-800 dark:text-gray-100 tabular-nums">
+                            {selectedDevice.diagnosticReport.battery.cycleCount ?? "N/A"}
+                          </span>
+                        </div>
+                        <div className="p-2.5 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                          <span className="text-gray-500 block">Capacidad Fábrica</span>
+                          <span className="font-bold text-base text-gray-800 dark:text-gray-100 tabular-nums">
+                            {selectedDevice.diagnosticReport.battery.designedCapacityMWh ? `${Math.round(selectedDevice.diagnosticReport.battery.designedCapacityMWh / 1000)} Wh` : "N/A"}
+                          </span>
+                        </div>
+                        <div className="p-2.5 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                          <span className="text-gray-500 block">Capacidad Actual</span>
+                          <span className="font-bold text-base text-gray-800 dark:text-gray-100 tabular-nums">
+                            {selectedDevice.diagnosticReport.battery.fullChargeCapacityMWh ? `${Math.round(selectedDevice.diagnosticReport.battery.fullChargeCapacityMWh / 1000)} Wh` : "N/A"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* BSOD & Critical Event Log crashes */}
+                  <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert size={16} className="text-red-500" />
+                        <h5 className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">Pantallazos Azules (BSOD) & Caídas Críticas</h5>
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        {selectedDevice.diagnosticReport.bsodAndCrashes?.length || 0} registrado(s)
+                      </span>
+                    </div>
+
+                    <div className="p-3">
+                      {selectedDevice.diagnosticReport.bsodAndCrashes && selectedDevice.diagnosticReport.bsodAndCrashes.length > 0 ? (
+                        <div className="space-y-2">
+                          {selectedDevice.diagnosticReport.bsodAndCrashes.map((bsod, idx) => (
+                            <div key={idx} className="p-3 bg-red-50/70 dark:bg-red-900/10 border border-red-100 dark:border-red-900/40 rounded-xl text-xs space-y-1">
+                              <div className="flex justify-between font-bold text-red-800 dark:text-red-300">
+                                <span>{bsod.source} ({bsod.bugcheckCode})</span>
+                                <span className="text-gray-500 font-normal">{bsod.date}</span>
+                              </div>
+                              <p className="text-gray-700 dark:text-gray-300 text-[11px] font-mono leading-relaxed">{bsod.message}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-4 text-center text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-lg border border-emerald-100 dark:border-emerald-900/30">
+                          ✓ No se registraron eventos críticos de Kernel-Power, errores WHEA ni pantallazos azules en los últimos 30 días.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Device Manager Drivers with issues */}
+                  {selectedDevice.diagnosticReport.driversWithIssues && selectedDevice.diagnosticReport.driversWithIssues.length > 0 && (
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-amber-200 dark:border-amber-800 p-4">
+                      <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 mb-2 font-bold text-xs uppercase">
+                        <AlertCircle size={16} />
+                        Dispositivos con Fallas en Administrador de Dispositivos ({selectedDevice.diagnosticReport.driversWithIssues.length})
+                      </div>
+                      <div className="space-y-1.5 text-xs">
+                        {selectedDevice.diagnosticReport.driversWithIssues.map((d, idx) => (
+                          <div key={idx} className="flex justify-between p-2 bg-amber-50/50 dark:bg-amber-900/10 rounded border border-amber-100 dark:border-amber-900/30">
+                            <span className="font-medium text-gray-800 dark:text-gray-200">{d.name}</span>
+                            <span className="text-amber-800 dark:text-amber-300 font-bold">Código {d.statusCode} ({d.statusDescription})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Antivirus and Startup Apps */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                      <p className="font-bold text-gray-700 dark:text-gray-300 mb-1">Seguridad & Antivirus Activo</p>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        {selectedDevice.diagnosticReport.securityAndStartup?.antivirus?.join(", ") || "Windows Defender"}
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                      <p className="font-bold text-gray-700 dark:text-gray-300 mb-1">Motherboard & BIOS</p>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        {selectedDevice.diagnosticReport.hardware?.motherboard?.manufacturer} {selectedDevice.diagnosticReport.hardware?.motherboard?.product} 
+                        {selectedDevice.diagnosticReport.hardware?.motherboard?.biosVersion ? ` (BIOS: ${selectedDevice.diagnosticReport.hardware.motherboard.biosVersion})` : ""}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
             <>
               {!clientId && clients[selectedDevice.clientId] && (
@@ -433,11 +720,19 @@ export function DevicesList({
             )}
           </div>
 
-          <div className="flex gap-2 mt-4">
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button
+              onClick={() => setShowDiagModal(true)}
+              className="flex-1 min-w-[140px] text-sm text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2 rounded-lg justify-center border border-emerald-200 dark:border-emerald-800 transition-colors"
+            >
+              <Activity size={15} />
+              {selectedDevice.diagnosticReport ? "Ver Diagnóstico Win" : "Obtener Diagnóstico Win"}
+            </button>
+
             {selectedDevice.msinfo && selectedDevice.msinfo.length > 0 && (
               <button
                 onClick={() => setSelectedMsinfo(selectedDevice.msinfo!)}
-                className="flex-1 text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1 hover:underline bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-lg justify-center border border-blue-100 dark:border-blue-800"
+                className="flex-1 min-w-[100px] text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1 hover:underline bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-lg justify-center border border-blue-100 dark:border-blue-800"
               >
                 <FileText size={14} /> msinfo32
               </button>
@@ -446,7 +741,7 @@ export function DevicesList({
             {selectedDevice.dxdiag && selectedDevice.dxdiag.length > 0 && (
               <button
                 onClick={() => setSelectedDxdiag(selectedDevice.dxdiag!)}
-                className="flex-1 text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1 hover:underline bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-lg justify-center border border-blue-100 dark:border-blue-800"
+                className="flex-1 min-w-[100px] text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1 hover:underline bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-lg justify-center border border-blue-100 dark:border-blue-800"
               >
                 <FileText size={14} /> DxDiag
               </button>
@@ -809,6 +1104,100 @@ export function DevicesList({
           </div>
         )}
       </Modal>
+
+      {/* Modal Instrucciones y Descarga de Diagnóstico Windows */}
+      {selectedDevice && (
+        <Modal 
+          isOpen={showDiagModal} 
+          onClose={() => setShowDiagModal(false)} 
+          title={`Diagnóstico Windows 10/11 - ${selectedDevice.brand} ${selectedDevice.model || ""}`}
+        >
+          <div className="space-y-5 p-2">
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-start gap-3">
+              <Activity size={20} className="text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+              <div className="text-xs text-emerald-800 dark:text-emerald-200">
+                <p className="font-bold">Ejecutable portable sin instalación</p>
+                <p className="mt-0.5">
+                  Recolecta automáticamente el estado de discos (S.M.A.R.T), batería, caídas y BSODs, errores de controladores y especificaciones de hardware, vinculando todo directamente a esta ficha.
+                </p>
+              </div>
+            </div>
+
+            {/* Opción 1: Descargar .cmd / ejecutable portable */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-800/80 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs">1</span>
+                  <h5 className="font-bold text-sm text-gray-900 dark:text-gray-100">Descargar Aplicativo Portable (.cmd / .exe)</h5>
+                </div>
+                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Recomendado</span>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                Descarga el archivo en un pendrive o directamente en la PC del cliente. Al hacer doble clic, solicitará permisos de Administrador, analizará el equipo en 15 segundos y enviará el reporte a GeekyFix automáticamente.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <a
+                  href={`/api/devices/${selectedDevice.id}/diagnostic-client`}
+                  download={`GeekyFix-Diagnostico-${selectedDevice.brand}.cmd`}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all"
+                >
+                  <DownloadCloud size={16} />
+                  Descargar Lanzador Portable (.cmd)
+                </a>
+                <a
+                  href={`/api/devices/${selectedDevice.id}/diagnostic-script`}
+                  download={`GeekyFix-Diagnostico-${selectedDevice.brand}.ps1`}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold text-xs rounded-xl transition-all"
+                >
+                  <FileText size={16} />
+                  Descargar Script PowerShell (.ps1)
+                </a>
+              </div>
+            </div>
+
+            {/* Opción 2: Ejecución remota directa de 1 línea */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-800/80 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-gray-600 text-white flex items-center justify-center font-bold text-xs">2</span>
+                <h5 className="font-bold text-sm text-gray-900 dark:text-gray-100">O ejecutar directamente por Terminal / PowerShell</h5>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                En la PC con Windows 10/11, presiona <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-[11px] font-mono">Win + X</kbd>, abre <strong>Terminal (Administrador)</strong> o <strong>PowerShell</strong>, pega este comando y presiona Enter:
+              </p>
+
+              <div className="relative">
+                <pre className="p-3 bg-gray-900 text-emerald-400 text-[11px] font-mono rounded-lg overflow-x-auto select-all">
+                  {`irm "${window.location.origin}/api/devices/${selectedDevice.id}/diagnostic-script" | iex`}
+                </pre>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`irm "${window.location.origin}/api/devices/${selectedDevice.id}/diagnostic-script" | iex`);
+                    setCopiedCmd(true);
+                    setTimeout(() => setCopiedCmd(false), 2500);
+                  }}
+                  className="absolute right-2 top-2 px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded text-xs font-bold transition-colors"
+                >
+                  {copiedCmd ? "¡Copiado!" : "Copiar"}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-2">
+              <span className="text-[11px] text-gray-400">
+                Al terminar el diagnóstico, el informe aparecerá de inmediato en la pestaña "Diagnóstico Windows".
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowDiagModal(false)}
+                className="px-5 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                Listo
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       <Modal isOpen={!!selectedMsinfo} onClose={() => setSelectedMsinfo(null)} title="Reporte msinfo32">
         {selectedMsinfo && (

@@ -1,0 +1,6 @@
+{
+  "summary":  "Plan de arquitectura e implementación del cliente de diagnóstico portable (.exe) y script para Windows 10/11 con recolección de hardware, SMART, BSOD, batería, red y servicios, integrado con GeekyFix y Gemini AI.",
+  "updatedAt":  "2026-11-11T01:39:18.295975674Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

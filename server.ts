@@ -166,7 +166,16 @@ app.post("/api/login", async (req, res) => {
 });
 
 app.use("/api", async (req, res, next) => {
-  if (req.path === "/login" || req.path === "/health" || req.path === "/debug" || req.path === "/webauthn/auth-options" || req.path === "/webauthn/auth-verify") {
+  if (
+    req.path === "/login" || 
+    req.path === "/health" || 
+    req.path === "/debug" || 
+    req.path === "/webauthn/auth-options" || 
+    req.path === "/webauthn/auth-verify" ||
+    req.path.endsWith("/diagnostic-script") ||
+    req.path.endsWith("/diagnostic-report") ||
+    req.path.endsWith("/diagnostic-client")
+  ) {
     return next();
   }
   
@@ -686,6 +695,401 @@ app.delete("/api/devices/:id", async (req, res) => {
   res.json({ success: true });
 });
 
+// Endpoint to receive diagnostic report from the Windows client
+app.post("/api/devices/:id/diagnostic-report", async (req, res) => {
+  try {
+    const db = await readDb();
+    const index = db.devices.findIndex((d: any) => d.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ error: "Equipo no encontrado" });
+    }
+
+    const report = req.body;
+    if (!report || typeof report !== "object") {
+      return res.status(400).json({ error: "Reporte inválido" });
+    }
+
+    // Attach timestamp if missing
+    if (!report.timestamp) {
+      report.timestamp = new Date().toISOString();
+    }
+
+    db.devices[index].diagnosticReport = report;
+
+    // Also automatically enrich hardware string if empty or basic
+    if (!db.devices[index].hardware || db.devices[index].hardware === "No especificado") {
+      const parts: string[] = [];
+      if (report.hardware?.cpu?.name) parts.push(report.hardware.cpu.name);
+      if (report.hardware?.ram?.totalGB) parts.push(`${report.hardware.ram.totalGB} GB RAM`);
+      if (report.os?.caption) parts.push(report.os.caption);
+      if (parts.length > 0) {
+        db.devices[index].hardware = parts.join(" | ");
+      }
+    }
+
+    await writeDb(db);
+    res.json({ success: true, message: "Diagnóstico recibido y vinculado al equipo correctamente" });
+  } catch (error: any) {
+    console.error("Error saving diagnostic report:", error);
+    res.status(500).json({ error: error.message || "Error al procesar el reporte" });
+  }
+});
+
+// Endpoint to generate Windows PowerShell diagnostic script for this device
+app.get("/api/devices/:id/diagnostic-script", async (req, res) => {
+  try {
+    const db = await readDb();
+    const device = db.devices.find((d: any) => d.id === req.params.id);
+    if (!device) {
+      return res.status(404).send("# Error: Equipo no encontrado en GeekyFix");
+    }
+
+    // Determine host URL
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
+    const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:3000";
+    const baseUrl = `${protocol}://${host}`;
+    const deviceId = req.params.id;
+
+    const script = `# =====================================================================
+# GEEKYFIX WORKSHOP - CLIENTE DE DIAGNOSTICO AUTOMATICO PARA WINDOWS 10 / 11
+# Equipo: ${device.brand} ${device.model || ""} (ID: ${deviceId})
+# =====================================================================
+
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ErrorActionPreference = "SilentlyContinue"
+
+Write-Host ""
+Write-Host " =========================================================" -ForegroundColor Cyan
+Write-Host "       GEEKYFIX WORKSHOP - DIAGNOSTICO AUTOMATICO          " -ForegroundColor Yellow
+Write-Host " =========================================================" -ForegroundColor Cyan
+Write-Host " Equipo asignado : ${device.brand} ${device.model || ""}" -ForegroundColor Gray
+Write-Host " Iniciando recoleccion segura de datos del sistema..." -ForegroundColor Gray
+Write-Host ""
+
+# 1. Informacion del Sistema Operativo
+Write-Host " [*] 1/7 Analizando Sistema Operativo y Tiempo de actividad..." -ForegroundColor Green
+$os = Get-CimInstance Win32_OperatingSystem
+$lastBoot = $os.LastBootUpTime
+$uptimeStr = ""
+if ($lastBoot) {
+    $ts = (Get-Date) - $lastBoot
+    $uptimeStr = "$($ts.Days)d $($ts.Hours)h $($ts.Minutes)m"
+}
+$osInfo = @{
+    caption = $os.Caption
+    build = $os.BuildNumber
+    architecture = $os.OSArchitecture
+    uptime = $uptimeStr
+}
+
+# 2. Informacion de Hardware (CPU, RAM, Placa Madre, GPU)
+Write-Host " [*] 2/7 Inspeccionando Procesador, Memoria RAM y Grafica..." -ForegroundColor Green
+$cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+$cs = Get-CimInstance Win32_ComputerSystem
+$bb = Get-CimInstance Win32_BaseBoard
+$bios = Get-CimInstance Win32_BIOS
+$gpus = Get-CimInstance Win32_VideoController
+
+$ramTotalGB = [Math]::Round(($cs.TotalPhysicalMemory / 1GB), 2)
+$ramFreeGB = [Math]::Round(($os.FreePhysicalMemory / 1MB), 2)
+$ramUsedPercent = 0
+if ($ramTotalGB -gt 0) {
+    $ramUsedPercent = [Math]::Round((($ramTotalGB - $ramFreeGB) / $ramTotalGB) * 100, 1)
+}
+
+$gpuList = @()
+foreach ($g in $gpus) {
+    if ($g.Name) {
+        $gpuList += @{
+            name = $g.Name
+            driverVersion = $g.DriverVersion
+        }
+    }
+}
+
+$hardwareInfo = @{
+    cpu = @{
+        name = $cpu.Name.Trim()
+        cores = $cpu.NumberOfCores
+        threads = $cpu.NumberOfLogicalProcessors
+        maxClock = $cpu.MaxClockSpeed
+    }
+    ram = @{
+        totalGB = $ramTotalGB
+        freeGB = $ramFreeGB
+        usedPercent = $ramUsedPercent
+    }
+    motherboard = @{
+        manufacturer = $bb.Manufacturer
+        product = $bb.Product
+        biosVersion = $bios.SMBIOSBIOSVersion
+    }
+    gpu = $gpuList
+}
+
+# 3. Discos, Particiones y Salud SMART
+Write-Host " [*] 3/7 Evaluando Unidades de Almacenamiento y Salud S.M.A.R.T..." -ForegroundColor Green
+$disks = Get-PhysicalDisk
+$volumes = Get-Volume | Where-Object { $_.DriveLetter }
+$storageList = @()
+
+foreach ($d in $disks) {
+    $diskGB = [Math]::Round(($d.Size / 1GB), 1)
+    $smartStatus = "Healthy"
+    if ($d.HealthStatus) {
+        $smartStatus = [string]$d.HealthStatus
+    }
+
+    $alerts = @()
+    if ($smartStatus -ne "Healthy") {
+        $alerts += "Estado S.M.A.R.T reporta advertencia o falla inminente."
+    }
+
+    $diskVolumes = @()
+    foreach ($v in $volumes) {
+        $vTotalGB = [Math]::Round(($v.Size / 1GB), 1)
+        $vFreeGB = [Math]::Round(($v.SizeRemaining / 1GB), 1)
+        $pFree = 0
+        if ($vTotalGB -gt 0) {
+            $pFree = [Math]::Round(($vFreeGB / $vTotalGB) * 100, 1)
+        }
+        $diskVolumes += @{
+            driveLetter = "$($v.DriveLetter):"
+            freeGB = $vFreeGB
+            totalGB = $vTotalGB
+            percentFree = $pFree
+        }
+        if ($pFree -lt 10) {
+            $alerts += "Espacio libre en particion $($v.DriveLetter): es menor al 10% ($($vFreeGB) GB restantes)."
+        }
+    }
+
+    $storageList += @{
+        model = $d.FriendlyName
+        sizeGB = $diskGB
+        mediaType = [string]$d.MediaType
+        healthStatus = $smartStatus
+        smartAlerts = $alerts
+        partitions = $diskVolumes
+    }
+}
+
+# 4. Bateria (Si es Notebook)
+Write-Host " [*] 4/7 Verificando Estado y Desgaste de Bateria..." -ForegroundColor Green
+$battery = Get-CimInstance Win32_Battery | Select-Object -First 1
+$batteryInfo = @{
+    present = $false
+}
+if ($battery) {
+    $batteryInfo = @{
+        present = $true
+        status = if ($battery.BatteryStatus -eq 2) { "Cargando / Conectado" } else { "En uso / Descargando" }
+        healthPercent = $battery.EstimatedChargeRemaining
+    }
+    # Intentar obtener detalle de diseno con powercfg
+    try {
+        $tempReport = "$env:TEMP\\geekyfix_battery.xml"
+        powercfg /batteryreport /xml /output $tempReport | Out-Null
+        if (Test-Path $tempReport) {
+            [xml]$bXml = Get-Content $tempReport
+            $bNode = $bXml.BatteryReport.Batteries.Battery | Select-Object -First 1
+            if ($bNode) {
+                $designCap = [int]$bNode.DesignCapacity
+                $fullCap = [int]$bNode.FullChargeCapacity
+                $cycleCount = [int]$bNode.CycleCount
+                $healthPct = 100
+                if ($designCap -gt 0 -and $fullCap -gt 0) {
+                    $healthPct = [Math]::Round(($fullCap / $designCap) * 100, 1)
+                }
+                $batteryInfo.designedCapacityMWh = $designCap
+                $batteryInfo.fullChargeCapacityMWh = $fullCap
+                $batteryInfo.healthPercent = $healthPct
+                $batteryInfo.cycleCount = $cycleCount
+            }
+            Remove-Item $tempReport -Force -ErrorAction SilentlyContinue
+        }
+    } catch {}
+}
+
+# 5. Registro de Errores y Pantallazos Azules (BSOD)
+Write-Host " [*] 5/7 Escaneando Registros de Eventos y Caidas del Sistema (BSOD)..." -ForegroundColor Green
+$bsodList = @()
+$criticalEvents = Get-WinEvent -FilterHashtable @{LogName='System'; Level=1,2; StartTime=(Get-Date).AddDays(-30)} -MaxEvents 40 -ErrorAction SilentlyContinue
+
+foreach ($ev in $criticalEvents) {
+    if ($ev.ProviderName -match "Kernel-Power" -or $ev.ProviderName -match "BugCheck" -or $ev.ProviderName -match "WHEA" -or $ev.Id -eq 41 -or $ev.Id -eq 1001) {
+        $msg = $ev.Message
+        if ($msg.Length -gt 250) { $msg = $msg.Substring(0, 247) + "..." }
+        $bsodList += @{
+            date = $ev.TimeCreated.ToString("yyyy-MM-dd HH:mm")
+            source = $ev.ProviderName
+            message = $msg
+            bugcheckCode = "Event ID $($ev.Id)"
+        }
+    }
+}
+$bsodList = $bsodList | Select-Object -First 10
+
+# 6. Controladores (Drivers) con Fallas
+Write-Host " [*] 6/7 Comprobando Administrador de Dispositivos (Drivers)..." -ForegroundColor Green
+$failedDevices = Get-CimInstance Win32_PnPEntity | Where-Object { $_.ConfigManagerErrorCode -ne 0 }
+$driverIssues = @()
+foreach ($fd in $failedDevices) {
+    $driverIssues += @{
+        name = $fd.Name
+        hardwareID = if ($fd.HardwareID) { $fd.HardwareID[0] } else { "N/A" }
+        statusCode = $fd.ConfigManagerErrorCode
+        statusDescription = $fd.Status
+    }
+}
+
+# 7. Seguridad, Antivirus y Programas en Inicio
+Write-Host " [*] 7/7 Verificando Antivirus, Firewall y Programas al Inicio..." -ForegroundColor Green
+$avList = @()
+try {
+    $avProducts = Get-CimInstance -Namespace "root/SecurityCenter2" -ClassName "AntiVirusProduct" -ErrorAction SilentlyContinue
+    foreach ($av in $avProducts) {
+        $avList += $av.displayName
+    }
+} catch {}
+if ($avList.Count -eq 0) {
+    $avList += "Windows Defender"
+}
+
+$startupApps = @()
+$runKeys = @("HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run")
+foreach ($rk in $runKeys) {
+    if (Test-Path $rk) {
+        $props = Get-ItemProperty $rk
+        foreach ($name in $props.PSObject.Properties.Name) {
+            if ($name -notmatch "^PS.*") {
+                $startupApps += @{
+                    name = $name
+                    command = [string]$props.$name
+                }
+            }
+        }
+    }
+}
+$startupApps = $startupApps | Select-Object -First 15
+
+# Red
+$netAdapters = Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled }
+$netList = @()
+foreach ($na in $netAdapters) {
+    $netList += @{
+        name = $na.Description
+        ipAddress = if ($na.IPAddress) { $na.IPAddress[0] } else { "N/A" }
+        macAddress = $na.MACAddress
+        status = "Conectado"
+    }
+}
+
+# Ensamble de reporte JSON
+$finalReport = @{
+    timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+    os = $osInfo
+    hardware = $hardwareInfo
+    storage = $storageList
+    battery = $batteryInfo
+    bsodAndCrashes = $bsodList
+    driversWithIssues = $driverIssues
+    securityAndStartup = @{
+        antivirus = $avList
+        firewallEnabled = $true
+        startupApps = $startupApps
+    }
+    network = $netList
+}
+
+$jsonPayload = $finalReport | ConvertTo-Json -Depth 6
+
+# Subida a GeekyFix
+Write-Host ""
+Write-Host " [^] Enviando diagnostico a GeekyFix Workshop..." -ForegroundColor Yellow
+$uploadUrl = "${baseUrl}/api/devices/${deviceId}/diagnostic-report"
+
+try {
+    $response = Invoke-RestMethod -Uri $uploadUrl -Method POST -Body $jsonPayload -ContentType "application/json; charset=utf-8"
+    Write-Host ""
+    Write-Host " =========================================================" -ForegroundColor Green
+    Write-Host "  ¡DIAGNOSTICO COMPLETADO Y SUBIDO CON EXITO A GEEKYFIX!   " -ForegroundColor Green
+    Write-Host " =========================================================" -ForegroundColor Green
+    Write-Host " Ya puedes revisar los resultados en vivo en el sistema." -ForegroundColor Gray
+} catch {
+    Write-Host ""
+    Write-Host " [!] Error al subir al servidor: $_" -ForegroundColor Red
+    Write-Host " Guarda este reporte en tu equipo o revisa la conexion de red." -ForegroundColor Gray
+    $finalReport | ConvertTo-Json -Depth 6 | Out-File -FilePath "$env:USERPROFILE\\Desktop\\GeekyFix_Diagnostico.json" -Encoding utf8
+    Write-Host " Se ha guardado una copia en tu Escritorio: GeekyFix_Diagnostico.json" -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "Presiona cualquier tecla para salir..."
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+`;
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="GeekyFix-Diagnostico-${device.brand}-${deviceId.substring(0, 6)}.ps1"`);
+    res.send(script);
+  } catch (error: any) {
+    console.error("Error generating diagnostic script:", error);
+    res.status(500).send("# Error al generar script de diagnostico");
+  }
+});
+
+// Endpoint to download portable .bat/.cmd executable launcher that wraps PowerShell
+app.get("/api/devices/:id/diagnostic-client", async (req, res) => {
+  try {
+    const db = await readDb();
+    const device = db.devices.find((d: any) => d.id === req.params.id);
+    if (!device) {
+      return res.status(404).send("Equipo no encontrado");
+    }
+
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
+    const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:3000";
+    const scriptUrl = `${protocol}://${host}/api/devices/${req.params.id}/diagnostic-script`;
+
+    // Portable .cmd / .bat launcher with auto-elevation to administrator (needed for SMART and EventLog)
+    const cmdContent = `@echo off
+title GeekyFix Diagnostic Tool - ${device.brand} ${device.model || ""}
+color 0b
+echo ========================================================
+echo    GeekyFix Workshop - Iniciando Diagnostico Windows
+echo ========================================================
+echo Solicitando permisos administrativos si son necesarios...
+
+:: Check for administrative rights
+net session >nul 2>&1
+if %errorLevel% == 0 (
+    goto :run_diag
+) else (
+    echo Elevando privilegios a Administrador para acceder a SMART y EventLog...
+    powershell -Command "Start-Process cmd -ArgumentList '/c %~dpnx0' -Verb RunAs"
+    exit /b
+)
+
+:run_diag
+cls
+echo Conectando con GeekyFix y ejecutando diagnostico...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; Invoke-Expression (Invoke-RestMethod -Uri '${scriptUrl}')"
+
+if %errorLevel% NEQ 0 (
+    echo.
+    echo Ocurrio un error al ejecutar el diagnostico.
+    pause
+)
+`;
+
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="GeekyFix-Diagnostico-${device.brand}.cmd"`);
+    res.send(cmdContent);
+  } catch (err: any) {
+    res.status(500).send("Error generating diagnostic client launcher");
+  }
+});
+
 app.post("/api/devices/:id/diagnose", async (req, res, next) => {
   try {
     const { messages } = req.body;
@@ -728,7 +1132,48 @@ Problema inicial reportado: ${device.problem || "No especificado"}\n\n`;
       contextText += `No hay tickets registrados aún para este equipo.\n\n`;
     }
 
-    contextText += `Usa la información anterior y las imágenes cargadas para diagnosticar problemas, responder preguntas técnicas, y sugerir procedimientos de reparación o pasos a seguir de forma directa y profesional.`;
+    // Add Diagnostic Report if available
+    if (device.diagnosticReport) {
+      const diag = device.diagnosticReport;
+      contextText += `=== REPORTE DE DIAGNÓSTICO AUTOMÁTICO DE WINDOWS ===\n`;
+      contextText += `Fecha del diagnóstico: ${diag.timestamp}\n`;
+      if (diag.os) contextText += `Sistema Operativo: ${diag.os.caption} (Build: ${diag.os.build}, ${diag.os.architecture}) - Uptime: ${diag.os.uptime || "N/A"}\n`;
+      if (diag.hardware?.cpu) contextText += `CPU: ${diag.hardware.cpu.name} (${diag.hardware.cpu.cores} núcleos / ${diag.hardware.cpu.threads} hilos)\n`;
+      if (diag.hardware?.ram) contextText += `RAM: ${diag.hardware.ram.totalGB} GB Total (Uso: ${diag.hardware.ram.usedPercent}%, Libre: ${diag.hardware.ram.freeGB} GB)\n`;
+      if (diag.hardware?.motherboard) contextText += `Motherboard: ${diag.hardware.motherboard.manufacturer} ${diag.hardware.motherboard.product} (BIOS: ${diag.hardware.motherboard.biosVersion || "N/A"})\n`;
+      if (diag.storage && diag.storage.length > 0) {
+        contextText += `Unidades de Almacenamiento:\n`;
+        diag.storage.forEach((s: any) => {
+          contextText += `  - ${s.model} (${s.sizeGB} GB, ${s.mediaType || "Disco"}) | Salud SMART: ${s.healthStatus}\n`;
+          if (s.smartAlerts && s.smartAlerts.length > 0) {
+            contextText += `    Alertas: ${s.smartAlerts.join(", ")}\n`;
+          }
+        });
+      }
+      if (diag.battery?.present) {
+        contextText += `Batería: Estado: ${diag.battery.status} | Salud estimada: ${diag.battery.healthPercent}% | Ciclos: ${diag.battery.cycleCount ?? "N/A"}\n`;
+      }
+      if (diag.bsodAndCrashes && diag.bsodAndCrashes.length > 0) {
+        contextText += `Caídas del Sistema / BSOD recientes:\n`;
+        diag.bsodAndCrashes.forEach((b: any) => {
+          contextText += `  - [${b.date}] ${b.source} (${b.bugcheckCode}): ${b.message}\n`;
+        });
+      } else {
+        contextText += `Caídas del Sistema: No se detectaron BSODs o eventos críticos recientes de Kernel-Power.\n`;
+      }
+      if (diag.driversWithIssues && diag.driversWithIssues.length > 0) {
+        contextText += `Controladores (Drivers) con fallas o código de error:\n`;
+        diag.driversWithIssues.forEach((d: any) => {
+          contextText += `  - ${d.name} (Código: ${d.statusCode} - ${d.statusDescription})\n`;
+        });
+      }
+      if (diag.securityAndStartup?.antivirus) {
+        contextText += `Antivirus detectado: ${diag.securityAndStartup.antivirus.join(", ")}\n`;
+      }
+      contextText += `\n`;
+    }
+
+    contextText += `Usa la información anterior, los datos del diagnóstico de Windows y las imágenes cargadas para diagnosticar problemas, responder preguntas técnicas, y sugerir procedimientos de reparación o pasos a seguir de forma directa y profesional.`;
 
     // Process and load images to include
     const allPhotos: string[] = [];

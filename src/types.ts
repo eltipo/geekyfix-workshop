@@ -21,6 +21,61 @@ export interface Ticket {
   photos: string[];
 }
 
+export interface DiagnosticReport {
+  timestamp: string;
+  os?: {
+    caption: string;
+    build: string;
+    architecture: string;
+    uptime?: string;
+  };
+  hardware?: {
+    cpu?: { name: string; cores: number; threads: number; maxClock?: number };
+    ram?: { totalGB: number; freeGB: number; usedPercent: number; speedMHz?: number };
+    motherboard?: { manufacturer: string; product: string; biosVersion?: string };
+    gpu?: { name: string; driverVersion?: string }[];
+  };
+  storage?: {
+    model: string;
+    sizeGB: number;
+    mediaType?: string;
+    healthStatus: string;
+    smartAlerts?: string[];
+    partitions?: { driveLetter: string; freeGB: number; totalGB: number; percentFree: number }[];
+  }[];
+  battery?: {
+    present: boolean;
+    designedCapacityMWh?: number;
+    fullChargeCapacityMWh?: number;
+    healthPercent?: number;
+    cycleCount?: number;
+    status?: string;
+  };
+  bsodAndCrashes?: {
+    date: string;
+    source: string;
+    message: string;
+    bugcheckCode?: string;
+  }[];
+  driversWithIssues?: {
+    name: string;
+    hardwareID?: string;
+    statusCode?: number;
+    statusDescription?: string;
+  }[];
+  securityAndStartup?: {
+    antivirus?: string[];
+    firewallEnabled?: boolean;
+    startupApps?: { name: string; command?: string }[];
+  };
+  network?: {
+    name: string;
+    ipAddress?: string;
+    macAddress?: string;
+    status?: string;
+  }[];
+}
+
 export interface Device {
   id: string;
   clientId: string;
@@ -35,6 +90,7 @@ export interface Device {
   photos: string[];
   msinfo?: { key: string; value: string }[];
   dxdiag?: { key: string; value: string }[];
+  diagnosticReport?: DiagnosticReport;
   tickets?: Ticket[];
 }
 
