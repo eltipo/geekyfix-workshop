@@ -356,7 +356,7 @@ export const api = {
       method: "DELETE",
     });
   },
-  changePassword: async (currentPassword: string, newPassword: string): Promise<{ success: boolean; token?: string }> => {
+  changePassword: async (newPassword: string, currentPassword?: string): Promise<{ success: boolean; token?: string }> => {
     const res = await fetch("/api/settings/password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

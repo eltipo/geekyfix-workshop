@@ -15,7 +15,8 @@ export function Settings() {
   const [showAboutModal, setShowAboutModal] = useState(false);
   
   const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({ current: "", newPass: "", confirm: "" });
+  const [passwordForm, setPasswordForm] = useState({ newPass: "", confirm: "" });
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
   
@@ -125,20 +126,20 @@ export function Settings() {
       setPasswordMsg({ type: 'error', text: "Las nuevas contraseñas no coinciden" });
       return;
     }
-    if (passwordForm.newPass.length < 6) {
-      setPasswordMsg({ type: 'error', text: "La contraseña debe tener al menos 6 caracteres" });
+    if (passwordForm.newPass.length < 4) {
+      setPasswordMsg({ type: 'error', text: "La contraseña debe tener al menos 4 caracteres" });
       return;
     }
     
     setIsSubmittingPassword(true);
     try {
-      const res = await api.changePassword(passwordForm.current, passwordForm.newPass);
+      const res = await api.changePassword(passwordForm.newPass);
       if (res.success) {
         if (res.token) localStorage.setItem("app_token", res.token);
         setPasswordMsg({ type: 'success', text: "Contraseña actualizada exitosamente" });
         setTimeout(() => {
           setIsChangingPassword(false);
-          setPasswordForm({ current: "", newPass: "", confirm: "" });
+          setPasswordForm({ newPass: "", confirm: "" });
           setPasswordMsg(null);
         }, 2000);
       }
@@ -587,12 +588,16 @@ export function Settings() {
           isOpen={true} 
           onClose={() => {
             setIsChangingPassword(false);
-            setPasswordForm({ current: "", newPass: "", confirm: "" });
+            setPasswordForm({ newPass: "", confirm: "" });
             setPasswordMsg(null);
           }} 
-          title="Cambiar Contraseña"
+          title="Cambiar / Generar Nueva Contraseña"
         >
           <form onSubmit={handleChangePassword} className="p-6 space-y-4">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Como ya iniciaste sesión, puedes definir una nueva clave directamente sin necesidad de recordar la anterior.
+            </p>
+
             {passwordMsg && (
               <div className={`p-4 rounded-xl flex items-center gap-3 border text-sm ${
                 passwordMsg.type === 'success' 
@@ -605,32 +610,49 @@ export function Settings() {
             )}
             
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Contraseña Actual</label>
-              <input 
-                type="password" 
-                required
-                className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                value={passwordForm.current}
-                onChange={e => setPasswordForm({...passwordForm, current: e.target.value})}
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Nueva Contraseña</label>
-              <input 
-                type="password" 
-                required
-                className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                value={passwordForm.newPass}
-                onChange={e => setPasswordForm({...passwordForm, newPass: e.target.value})}
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">Nueva Contraseña</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+                    let generated = "";
+                    for (let i = 0; i < 8; i++) {
+                      generated += chars.charAt(Math.floor(Math.random() * chars.length));
+                    }
+                    setPasswordForm({ newPass: generated, confirm: generated });
+                    setShowNewPassword(true);
+                  }}
+                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Generar automática
+                </button>
+              </div>
+              <div className="relative">
+                <input 
+                  type={showNewPassword ? "text" : "password"} 
+                  required
+                  placeholder="Ingresa la nueva clave"
+                  className="w-full px-4 py-2 pr-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  value={passwordForm.newPass}
+                  onChange={e => setPasswordForm({...passwordForm, newPass: e.target.value})}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
             
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Confirmar Nueva Contraseña</label>
               <input 
-                type="password" 
+                type={showNewPassword ? "text" : "password"} 
                 required
+                placeholder="Repite la nueva clave"
                 className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                 value={passwordForm.confirm}
                 onChange={e => setPasswordForm({...passwordForm, confirm: e.target.value})}

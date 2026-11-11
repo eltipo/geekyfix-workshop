@@ -190,13 +190,11 @@ app.use("/api", async (req, res, next) => {
 });
 
 app.post("/api/settings/password", async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  const db = await readDb();
-  const storedPassword = db.settings?.password || process.env.APP_PASSWORD || "admin";
-  
-  if (currentPassword !== storedPassword) {
-    return res.status(401).json({ error: "La contraseña actual es incorrecta" });
+  const { newPassword } = req.body;
+  if (!newPassword || typeof newPassword !== "string" || newPassword.length < 4) {
+    return res.status(400).json({ error: "La nueva contraseña debe tener al menos 4 caracteres" });
   }
+  const db = await readDb();
   
   if (!db.settings) {
     db.settings = {};
